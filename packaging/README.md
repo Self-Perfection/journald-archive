@@ -25,7 +25,7 @@ from the repo root (the `deb/` method does this in
 [`deb/build.sh`](deb/build.sh) by staging into a temp tree). Install paths
 should match what the core expects:
 
-- `sbin/journald-archive` → `/usr/sbin/journald-archive`
+- `libexec/journald-archive` → `/usr/lib/journald-archive/journald-archive`
 - `bin/journalctl-all` → `/usr/bin/journalctl-all`
 - `bash-completion/journalctl-all` → `/usr/share/bash-completion/completions/journalctl-all`
 - `zsh-completion/_journalctl-all` → `/usr/share/zsh/vendor-completions/_journalctl-all`

@@ -2,8 +2,11 @@ journald-archive (0.2.1) UNRELEASED; urgency=low
 
   * Drop the redundant manual debconf dependency; it is already pulled in via
     ${misc:Depends} as "debconf (>= 0.5) | debconf-2.0".
+  * Move the timer helper out of $PATH: install it to
+    /usr/lib/journald-archive/ instead of /usr/sbin. It is a private helper
+    invoked by the service, not a user command.
 
- -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 14:58:59 +0000
+ -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 15:01:51 +0000
 
 journald-archive (0.2.0) unstable; urgency=low
 

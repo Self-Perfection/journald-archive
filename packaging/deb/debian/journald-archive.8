@@ -63,6 +63,11 @@ Exits zero on success, including when there is nothing to move. Exits non-zero
 if the archive mount point is not mounted or a fatal error occurs.
 .SH FILES
 .TP
+.I /usr/lib/journald-archive/journald-archive
+The script itself. It is a private helper invoked by the timer and is
+deliberately not placed on
+.BR $PATH .
+.TP
 .I /etc/default/journald-archive
 Runtime configuration.
 .TP

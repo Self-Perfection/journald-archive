@@ -1,4 +1,4 @@
-sbin/journald-archive                          usr/sbin
+libexec/journald-archive                       usr/lib/journald-archive
 bin/journalctl-all                             usr/bin
 bash-completion/journalctl-all                 usr/share/bash-completion/completions
 zsh-completion/_journalctl-all                 usr/share/zsh/vendor-completions

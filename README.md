@@ -37,8 +37,9 @@ mergerfs read-only:
 
 The runtime is distribution-agnostic:
 
-- [`sbin/journald-archive`](sbin/journald-archive) — the mv-and-vacuum script,
-  run by the timer.
+- [`libexec/journald-archive`](libexec/journald-archive) — the mv-and-vacuum
+  script, run by the timer (installed to `/usr/lib/journald-archive/`, not on
+  `$PATH`).
 - [`bin/journalctl-all`](bin/journalctl-all) — convenience wrapper that runs
   `journalctl` against the combined view (with bash and zsh completion).
 - [`systemd/`](systemd) — a oneshot service, its 30-minute timer, and the two
