@@ -1,3 +1,14 @@
+journald-archive (0.2.0) UNRELEASED; urgency=low
+
+  * Add journalctl-all: a wrapper that queries the combined live+archive
+    view (/var/log/journal_combined), with bash and zsh completion that
+    mirror journalctl's.
+  * Ship a journalctl-all(1) manual page.
+  * Validate the debconf size answers; re-prompt on non-numeric input
+    instead of failing configuration with a cryptic fallocate error.
+
+ -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 14:17:05 +0000
+
 journald-archive (0.1.0) UNRELEASED; urgency=low
 
   * Initial release.
