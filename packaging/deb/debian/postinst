@@ -55,6 +55,11 @@ case "$1" in
 ARCHIVE_MOUNT="$ARCHIVE_MOUNT"
 ARCHIVE_FILE="$ARCHIVE_FILE"
 VACUUM_SIZE_GIB=$VACUUM_GIB
+
+# Grace period in minutes: a rotated journal is archived only once it is older
+# than this. Larger values keep more recent history in the fast hot tier,
+# queryable with plain \`journalctl\`. Examples: 60 = 1 hour, 1440 = 1 day.
+GRACE_MINUTES=1
 EOF
             chmod 644 /etc/default/journald-archive
         fi

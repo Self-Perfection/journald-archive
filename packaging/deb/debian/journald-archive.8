@@ -21,7 +21,9 @@ otherwise (to avoid filling the root filesystem);
 .IP \(bu 3
 moves every rotated
 .RI ( *@*.journal )
-file older than one minute from the active machine's journal directory into
+file older than the configured grace period (see
+.BR GRACE_MINUTES )
+from the active machine's journal directory into
 the corresponding directory under the archive (a cross-filesystem move, which
 recompresses the data via the archive's
 .B compress\-force=zstd
@@ -31,8 +33,9 @@ if anything was moved, runs
 .B journalctl \-\-vacuum\-size
 against the archive to enforce the configured logical retention limit.
 .PP
-Active (currently written) journal files are never touched. The one-minute
-age threshold avoids racing journald during rotation.
+Active (currently written) journal files are never touched. The grace period
+both avoids racing journald during rotation and keeps the most recently
+rotated logs in the fast hot tier.
 .PP
 .B journald-archive
 takes no arguments and is normally invoked by
@@ -55,6 +58,14 @@ Backing btrfs loopback file. Default
 Logical (uncompressed) size cap passed to
 .BR "journalctl \-\-vacuum\-size" .
 This bounds the amount of journal data retained in the archive.
+.TP
+.B GRACE_MINUTES
+Minimum age, in minutes, before a rotated journal is moved to the archive.
+Larger values keep more recent history in the fast hot tier (queryable with
+plain
+.BR journalctl );
+the lower bound also avoids racing journald right after rotation. Defaults to
+1 when unset. Examples: 60 (one hour), 1440 (one day).
 .PP
 The file is re-read on every invocation, so changes take effect on the next
 timer tick without a daemon reload.

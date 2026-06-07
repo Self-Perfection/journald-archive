@@ -7,6 +7,18 @@ set -euo pipefail
 : "${ARCHIVE_MOUNT:?ARCHIVE_MOUNT not set in /etc/default/journald-archive}"
 : "${VACUUM_SIZE_GIB:?VACUUM_SIZE_GIB not set in /etc/default/journald-archive}"
 
+# Grace period (minutes): a rotated file is archived only once it is older
+# than this. Larger values keep more recent history in the fast hot tier;
+# the lower bound also avoids racing journald right after rotation. Defaults
+# to 1, which preserves the behaviour of installs predating this option.
+GRACE_MINUTES="${GRACE_MINUTES:-1}"
+case "$GRACE_MINUTES" in
+    ''|*[!0-9]*)
+        echo "GRACE_MINUTES must be a non-negative integer (got '$GRACE_MINUTES')" >&2
+        exit 1
+        ;;
+esac
+
 if ! mountpoint -q -- "$ARCHIVE_MOUNT"; then
     echo "$ARCHIVE_MOUNT is not a mount point — aborting to avoid writing onto rootfs" >&2
     exit 1
@@ -22,15 +34,15 @@ if [ ! -d "$DST" ]; then
     install -d -m 2755 -o root -g systemd-journal "$DST"
 fi
 
-shopt -s nullglob
+# Candidates: sealed, rotated journals (name contains '@', never the active
+# system.journal) directly under the machine directory, older than the grace
+# period. -print0/read -d '' keeps this robust regardless of file names.
 moved=0
-for f in "$SRC"/*@*.journal; do
-    # Skip files journald may still be finalizing (<60s old).
-    [ -n "$(find "$f" -mmin +1 -print 2>/dev/null)" ] || continue
+while IFS= read -r -d '' f; do
     if mv -n -- "$f" "$DST/"; then
         moved=$((moved+1))
     fi
-done
+done < <(find "$SRC" -maxdepth 1 -type f -name '*@*.journal' -mmin +"$GRACE_MINUTES" -print0)
 
 if [ "$moved" -gt 0 ]; then
     journalctl -D "$ARCHIVE_MOUNT" --vacuum-size="${VACUUM_SIZE_GIB}G" --quiet >/dev/null

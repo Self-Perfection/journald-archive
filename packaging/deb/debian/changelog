@@ -5,6 +5,9 @@ journald-archive (0.2.1) UNRELEASED; urgency=low
   * Move the timer helper out of $PATH: install it to
     /usr/lib/journald-archive/ instead of /usr/sbin. It is a private helper
     invoked by the service, not a user command.
+  * Make the archive grace period configurable via GRACE_MINUTES in
+    /etc/default/journald-archive (default 1, preserving previous behaviour).
+    Candidate selection now uses a single name/path/age-filtered find.
 
  -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 15:01:51 +0000
 
