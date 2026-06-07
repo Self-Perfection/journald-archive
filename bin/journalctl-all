@@ -1,0 +1,18 @@
+#!/bin/bash
+# journalctl over the combined hot+archive view.
+#
+# Thin wrapper around `journalctl --directory=/var/log/journal_combined`,
+# the read-only mergerfs union of the live journal and the compressed
+# archive. All arguments are passed through unchanged, so it behaves exactly
+# like journalctl but queries the full history instead of only the hot tier.
+set -euo pipefail
+
+COMBINED="/var/log/journal_combined"
+
+if ! mountpoint -q -- "$COMBINED"; then
+    echo "journalctl-all: warning: $COMBINED is not mounted;" \
+         "results may be incomplete. Start the union with:" >&2
+    echo "    systemctl start var-log-journal_combined.mount" >&2
+fi
+
+exec journalctl --directory="$COMBINED" "$@"

@@ -30,7 +30,7 @@ mergerfs read-only:
    /var/log/journal=RO
    /var/log/journal_archive=RO
         ↓
-/var/log/journal_combined/         for journalctl -D /var/log/journal_combined
+/var/log/journal_combined/         queried via `journalctl-all`
 ```
 
 ## Components
@@ -39,11 +39,13 @@ The runtime is distribution-agnostic:
 
 - [`sbin/journald-archive`](sbin/journald-archive) — the mv-and-vacuum script,
   run by the timer.
+- [`bin/journalctl-all`](bin/journalctl-all) — convenience wrapper that runs
+  `journalctl` against the combined view (with bash completion).
 - [`systemd/`](systemd) — a oneshot service, its 30-minute timer, and the two
   mount units (archive btrfs loopback + mergerfs union).
 
-See [`journald-archive(8)`](packaging/deb/debian/journald-archive.8) for the
-script's manual page.
+See [`journald-archive(8)`](packaging/deb/debian/journald-archive.8) and
+[`journalctl-all(1)`](packaging/deb/debian/journalctl-all.1) for manual pages.
 
 ## Installation
 
@@ -93,8 +95,12 @@ then `systemctl daemon-reload && systemctl restart journald-archive.timer`.
 journalctl -u nginx -n 100
 
 # Full history including archive — slower but complete
-journalctl -D /var/log/journal_combined -u nginx --since 2025-01-01
+journalctl-all -u nginx --since 2025-01-01
 ```
+
+`journalctl-all` is a thin wrapper for
+`journalctl --directory=/var/log/journal_combined`; it takes all the same
+options and tab-completes like `journalctl`.
 
 ## Maintenance notes
 

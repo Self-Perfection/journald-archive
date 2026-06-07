@@ -1,0 +1,47 @@
+.TH JOURNALCTL-ALL 1 "2026-05-27" "journald-archive 0.1.0" "User Commands"
+.SH NAME
+journalctl-all \- query the combined live + archived systemd journal
+.SH SYNOPSIS
+.B journalctl-all
+.RI [ journalctl-options "...]"
+.SH DESCRIPTION
+.B journalctl-all
+is a thin wrapper around
+.BR journalctl (1)
+that queries the read-only mergerfs union of the hot tier
+.RI ( /var/log/journal )
+and the compressed archive
+.RI ( /var/log/journal_archive ),
+exposed at
+.IR /var/log/journal_combined .
+.PP
+It is equivalent to running:
+.PP
+.RS
+.B journalctl --directory=/var/log/journal_combined
+.RI [ options "...]"
+.RE
+.PP
+All arguments are passed through to
+.BR journalctl (1)
+unchanged, so every option behaves identically \(em the only difference is
+that the query spans the full retained history (live plus archive) instead of
+only the recent logs in the hot tier.
+.PP
+If the combined view is not currently mounted,
+.B journalctl-all
+prints a warning naming the mount unit to start, then runs
+.BR journalctl (1)
+anyway.
+.SH EXAMPLES
+.TP
+.B journalctl-all -u nginx --since 2025-01-01
+Show all nginx logs since the start of 2025, including archived ones.
+.TP
+.B journalctl-all --disk-usage
+Report the on-disk size across both tiers.
+.SH SEE ALSO
+.BR journalctl (1),
+.BR journald-archive (8)
+.SH AUTHOR
+Alexander <alexander.s.m@gmail.com>

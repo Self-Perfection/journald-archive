@@ -21,7 +21,7 @@ SRC="$STAGE/journald-archive"
 mkdir -p "$SRC"
 
 # Portable core, shared with every other packaging method.
-cp -r "$ROOT/sbin" "$ROOT/systemd" "$SRC/"
+cp -r "$ROOT/sbin" "$ROOT/bin" "$ROOT/systemd" "$ROOT/bash-completion" "$SRC/"
 # Debian packaging metadata.
 cp -r "$HERE/debian" "$SRC/"
 

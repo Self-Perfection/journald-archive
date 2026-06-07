@@ -1,0 +1,26 @@
+# bash completion for journalctl-all -- reuse journalctl's own completion.
+#
+# journalctl-all is a pass-through wrapper, so its options and field values
+# are identical to journalctl's. Rather than duplicate that logic we lazily
+# load journalctl's completion function (_journalctl) and delegate to it.
+
+_journalctl_all()
+{
+    # Pull in journalctl's completion if it is not loaded yet. The helper
+    # name has changed across bash-completion versions, so try each.
+    if ! declare -F _journalctl >/dev/null 2>&1; then
+        if declare -F _comp_load >/dev/null 2>&1; then
+            _comp_load journalctl 2>/dev/null
+        elif declare -F __load_completion >/dev/null 2>&1; then
+            __load_completion journalctl 2>/dev/null
+        elif declare -F _completion_loader >/dev/null 2>&1; then
+            _completion_loader journalctl 2>/dev/null
+        fi
+    fi
+
+    if declare -F _journalctl >/dev/null 2>&1; then
+        _journalctl "$@"
+    fi
+}
+
+complete -F _journalctl_all journalctl-all

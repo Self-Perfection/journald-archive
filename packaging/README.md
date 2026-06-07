@@ -20,12 +20,14 @@ its own copy, so there is a single source of truth for the script and units.
 
 ## Adding a new method
 
-Create a subdirectory here, and have its build step pull `sbin/` and
-`systemd/` from the repo root (the `deb/` method does this in
+Create a subdirectory here, and have its build step pull the core directories
+from the repo root (the `deb/` method does this in
 [`deb/build.sh`](deb/build.sh) by staging into a temp tree). Install paths
 should match what the core expects:
 
 - `sbin/journald-archive` → `/usr/sbin/journald-archive`
+- `bin/journalctl-all` → `/usr/bin/journalctl-all`
+- `bash-completion/journalctl-all` → `/usr/share/bash-completion/completions/journalctl-all`
 - `systemd/*` → `/usr/lib/systemd/system/`
 
 and the package should depend on `systemd`, `mergerfs`, and `btrfs-progs`.
