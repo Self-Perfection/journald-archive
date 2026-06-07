@@ -33,80 +33,57 @@ mergerfs read-only:
 /var/log/journal_combined/         for journalctl -D /var/log/journal_combined
 ```
 
-## Build
+## Components
 
-### Host requirements
+The runtime is distribution-agnostic:
 
-A Debian/Ubuntu machine with the toolchain installed:
+- [`sbin/journald-archive`](sbin/journald-archive) — the mv-and-vacuum script,
+  run by the timer.
+- [`systemd/`](systemd) — a oneshot service, its 30-minute timer, and the two
+  mount units (archive btrfs loopback + mergerfs union).
 
-```bash
-make install-deps     # apt install debhelper dpkg-dev devscripts fakeroot lintian
-```
+See [`journald-archive(8)`](packaging/deb/debian/journald-archive.8) for the
+script's manual page.
 
-Or manually:
-```bash
-sudo apt install debhelper dpkg-dev fakeroot
-# Optional but useful:
-sudo apt install devscripts lintian
-```
+## Installation
 
-### Building
+Installation is handled per-distribution under [`packaging/`](packaging):
 
-```bash
-make build            # → ../journald-archive_0.1.0_all.deb
-make lint             # run lintian on the built deb
-make clean            # remove build artifacts
-```
+| Method | Target | Status |
+|--------|--------|--------|
+| [Debian package](packaging/deb) | Debian, Ubuntu | available |
+| RPM / Arch / `install.sh` | others | planned |
 
-Under the hood `make build` runs `dpkg-buildpackage -us -uc -b`:
-- `-us` — don't sign source
-- `-uc` — don't sign changes
-- `-b`  — binary-only build (no source tarball)
-
-The `.deb` lands in the parent directory by convention.
-
-## Install
-
-```bash
-scp ../journald-archive_*.deb root@host:/tmp/
-ssh root@host 'apt install /tmp/journald-archive_*.deb'
-```
-
-(Using `apt install` instead of `dpkg -i` pulls in `mergerfs` and
-`btrfs-progs` automatically if missing.)
-
-On install, you will be asked for the loopback file size (default
-computed from the current `/var/log/journal/` size, divided by 5 and
-rounded up to GiB). The vacuum-size default is 5× the loopback.
-
-For unattended install:
-```bash
-DEBIAN_FRONTEND=noninteractive apt install /tmp/journald-archive_*.deb
-```
+For Debian/Ubuntu, see [`packaging/deb/README.md`](packaging/deb/README.md):
+build a `.deb`, copy it to the target, and `apt install` it. On install you
+are asked for the archive size; sensible defaults are computed from the
+current journal size.
 
 ## Configuration
 
 Runtime config lives in `/etc/default/journald-archive`:
+
 ```ini
 ARCHIVE_MOUNT="/var/log/journal_archive"
 ARCHIVE_FILE="/var/log/journal_archive.btrfs"
 VACUUM_SIZE_GIB=10
 ```
 
-Edit and run `systemctl restart journald-archive.timer` (or just wait for
-the next tick) — the values are re-read on every script invocation.
+Edit and run `systemctl restart journald-archive.timer` (or just wait for the
+next tick) — the values are re-read on every script invocation.
 
-To change the loopback file size after install: stop the mount, resize
-the file (`fallocate` or `truncate`), `btrfs filesystem resize` from
-inside a temporary mount, then restart the mount unit. Or just remove
-the file and reinstall with new debconf answers.
+To change the loopback file size after install: stop the mount, resize the
+file (`fallocate` or `truncate`), `btrfs filesystem resize` from inside a
+temporary mount, then restart the mount unit.
 
 To change the timer interval, drop in:
+
 ```ini
 # /etc/systemd/system/journald-archive.timer.d/override.conf
 [Timer]
 OnUnitActiveSec=15min
 ```
+
 then `systemctl daemon-reload && systemctl restart journald-archive.timer`.
 
 ## Usage
@@ -122,39 +99,21 @@ journalctl -D /var/log/journal_combined -u nginx --since 2025-01-01
 ## Maintenance notes
 
 - After `systemctl restart systemd-journald`, journald writes to
-  `/run/log/journal` until something sends it `SIGUSR1`. To restore
-  persistent journaling: `systemctl restart systemd-journal-flush`.
-  This is upstream systemd behavior — this package deliberately does
-  not auto-flush, so you can do maintenance with logs going to tmpfs.
+  `/run/log/journal` until something sends it `SIGUSR1`. To restore persistent
+  journaling: `systemctl restart systemd-journal-flush`. This is upstream
+  systemd behavior — this tool deliberately does not auto-flush, so you can do
+  maintenance with logs going to tmpfs.
 
 - The archive timer skips files younger than 60 seconds to avoid racing
   journald during rotation.
 
-- `journalctl --vacuum-size` operates on *logical* (uncompressed) bytes,
-  the loopback file size caps the *physical* on-disk usage. As long as
+- `journalctl --vacuum-size` operates on *logical* (uncompressed) bytes; the
+  loopback file size caps the *physical* on-disk usage. As long as
   vacuum-size ≥ loopback, btrfs cannot hit ENOSPC.
 
-- The package does NOT modify `/etc/systemd/journald.conf`. Set
+- This tool does NOT modify `/etc/systemd/journald.conf`. Set
   `SystemMaxFileSize` etc. to your own taste.
 
-## Uninstall
-
-```bash
-apt remove journald-archive          # stops timer, leaves mounts & data
-apt purge journald-archive           # also removes /etc/default/journald-archive
-```
-
-The loopback file `/var/log/journal_archive.btrfs` is **never** removed
-automatically — it contains your archived journals. Delete manually if
-you no longer want them.
-
-## Layout
-
-```
-debian/                       Debian packaging metadata
-sbin/journald-archive         The mv-and-vacuum script
-systemd/*.service             oneshot service that runs the script
-systemd/*.timer               30-min timer for the service
-systemd/*.mount               Mount units for archive btrfs + mergerfs
-Makefile                      Build helpers
-```
+- The loopback file `/var/log/journal_archive.btrfs` holds your archived
+  journals and is never removed by uninstallation. Delete it manually if you
+  no longer want the history.

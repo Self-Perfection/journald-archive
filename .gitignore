@@ -1,13 +1,7 @@
-# debhelper / dpkg-buildpackage build artifacts
-debian/.debhelper/
-debian/files
-debian/debhelper-build-stamp
-debian/journald-archive/
-debian/journald-archive.substvars
-debian/*.debhelper
-*.debhelper.log
-
-# Build outputs (land in the parent dir by convention, but ignore if moved here)
+# Build outputs. The deb is built out-of-tree (see packaging/deb/build.sh),
+# so debhelper artifacts never land in the source tree — only the final
+# package, which build.sh drops into packaging/deb/dist/.
+packaging/deb/dist/
 *.deb
 *.buildinfo
 *.changes
