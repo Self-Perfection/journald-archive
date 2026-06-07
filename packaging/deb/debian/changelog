@@ -1,4 +1,4 @@
-journald-archive (0.2.1) UNRELEASED; urgency=low
+journald-archive (0.2.1) unstable; urgency=low
 
   * Drop the redundant manual debconf dependency; it is already pulled in via
     ${misc:Depends} as "debconf (>= 0.5) | debconf-2.0".
@@ -13,7 +13,7 @@ journald-archive (0.2.1) UNRELEASED; urgency=low
     the option get GRACE_MINUTES appended (without touching existing values)
     so the knob is discoverable.
 
- -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 15:01:51 +0000
+ -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 18:17:18 +0000
 
 journald-archive (0.2.0) unstable; urgency=low
 
