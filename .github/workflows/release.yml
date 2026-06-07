@@ -1,0 +1,55 @@
+name: Release
+
+# Triggered by pushing a version tag (e.g. v0.3.0). Builds the .deb clean-room
+# from exactly the tagged commit, gates on the release checklist, then creates
+# the GitHub Release with the .deb attached. Building from the tag (not a
+# developer's working tree) guarantees the embedded changelog matches what is
+# published.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+            build-essential debhelper dpkg-dev fakeroot lintian
+
+      - name: Verify changelog matches tag
+        run: |
+          changelog=packaging/deb/debian/changelog
+          version=$(dpkg-parsechangelog -l "$changelog" -S Version)
+          dist=$(dpkg-parsechangelog -l "$changelog" -S Distribution)
+          tag=${GITHUB_REF_NAME#v}
+          echo "tag=$tag  changelog version=$version  distribution=$dist"
+          if [ "$dist" = UNRELEASED ]; then
+            echo "::error::Top changelog entry is UNRELEASED — finalize it before tagging."
+            exit 1
+          fi
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag v$tag does not match changelog version $version."
+            exit 1
+          fi
+
+      - name: Build package
+        run: make -C packaging/deb build
+
+      - name: Lint package
+        run: make -C packaging/deb lint
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: packaging/deb/dist/*.deb
+          fail_on_unmatched_files: true
+          generate_release_notes: true

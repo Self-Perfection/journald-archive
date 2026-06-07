@@ -12,6 +12,12 @@ override_dh_auto_build:
 override_dh_auto_test:
 override_dh_auto_install:
 
+# The timer's helper lives under /usr/lib, where dh_fixperms leaves files 0644.
+# It is executed directly by the service, so restore the executable bit.
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0755 debian/journald-archive/usr/lib/journald-archive/journald-archive
+
 override_dh_installsystemd:
 	dh_installsystemd --no-enable --no-start journald-archive.service
 	dh_installsystemd journald-archive.timer

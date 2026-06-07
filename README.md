@@ -24,7 +24,8 @@ separate archive (cheap to store, slow but rarely accessed).
 /var/log/journal_archive.btrfs     loopback file on rootfs
    │  mount: compress-force=zstd:8
    ▼
-/var/log/journal_archive/          cold tier — vacuum-size cap
+/var/log/journal_archive/          cold tier — capped by loopback size,
+                                   oldest journals evicted to stay within it
 
 mergerfs read-only:
    /var/log/journal=RO
@@ -69,7 +70,7 @@ Runtime config lives in `/etc/default/journald-archive`:
 ```ini
 ARCHIVE_MOUNT="/var/log/journal_archive"
 ARCHIVE_FILE="/var/log/journal_archive.btrfs"
-VACUUM_SIZE_GIB=10
+FREE_MARGIN_MIB=128        # evict oldest once free space drops below this
 GRACE_MINUTES=30           # keep rotated logs hot for N minutes before archiving
 ```
 
@@ -118,9 +119,13 @@ options and tab-completes like `journalctl`.
   hot tier — raise it to keep more recent history queryable with plain
   `journalctl`.
 
-- `journalctl --vacuum-size` operates on *logical* (uncompressed) bytes; the
-  loopback file size caps the *physical* on-disk usage. As long as
-  vacuum-size ≥ loopback, btrfs cannot hit ENOSPC.
+- Retention is bounded by **physical disk**, not a logical size or a time
+  window. The archive keeps as much history as fits in the loopback file; when
+  free space drops below `FREE_MARGIN_MIB`, the oldest archived journals are
+  deleted. Better compression therefore buys more history automatically — but
+  there is no guaranteed *minimum* retention: under a fixed disk budget a burst
+  of logs can always force the oldest history out. Size the loopback to the
+  budget you can spare.
 
 - This tool does NOT modify `/etc/systemd/journald.conf`. Set
   `SystemMaxFileSize` etc. to your own taste.

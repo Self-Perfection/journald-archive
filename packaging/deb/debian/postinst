@@ -11,20 +11,20 @@ case "$1" in
     configure)
         db_get journald-archive/loopback_size_gib
         LOOPBACK_GIB=$RET
-        db_get journald-archive/vacuum_size_gib
-        VACUUM_GIB=$RET
 
-        # The config script validates these, but guard anyway so a bad value
+        # The config script validates this, but guard anyway so a bad value
         # (e.g. a hand-preseeded one) fails clearly instead of as a cryptic
         # `fallocate: invalid length value` further down.
         is_positive_int() { case "$1" in ''|*[!0-9]*) return 1 ;; *[1-9]*) return 0 ;; *) return 1 ;; esac; }
-        if ! is_positive_int "$LOOPBACK_GIB" || ! is_positive_int "$VACUUM_GIB"; then
-            echo "journald-archive: invalid size configuration" \
-                 "(loopback='$LOOPBACK_GIB', vacuum='$VACUUM_GIB')." >&2
-            echo "Each must be a positive whole number of GiB." \
+        if ! is_positive_int "$LOOPBACK_GIB"; then
+            echo "journald-archive: invalid loopback size '$LOOPBACK_GIB'." >&2
+            echo "It must be a positive whole number of GiB." \
                  "Fix with: dpkg-reconfigure journald-archive" >&2
             exit 1
         fi
+
+        # Default free margin: ~1/16 of the budget (GiB*1024/16 == GiB*64 MiB).
+        MARGIN_MIB=$(( LOOPBACK_GIB * 64 ))
 
         # /var/log/journal must exist for mergerfs to use it as a branch.
         # If absent, create it with journald-style perms; this implicitly
@@ -54,7 +54,12 @@ case "$1" in
 
 ARCHIVE_MOUNT="$ARCHIVE_MOUNT"
 ARCHIVE_FILE="$ARCHIVE_FILE"
-VACUUM_SIZE_GIB=$VACUUM_GIB
+
+# Free space to keep available in the archive, in MiB. When free space drops
+# below this, the oldest archived journals are deleted to make room for new
+# ones. Defaults to about 1/16 of the archive size. Raise it if you set a large
+# journald SystemMaxFileSize, so each rotated journal always has room to land.
+FREE_MARGIN_MIB=$MARGIN_MIB
 
 # Grace period in minutes: a rotated journal is archived only once it is older
 # than this. Larger values keep more recent history in the fast hot tier,
@@ -76,6 +81,34 @@ EOF
 # queryable with plain `journalctl`. Examples: 60 = 1 hour, 1440 = 1 day.
 GRACE_MINUTES=30
 GRACEEOF
+        fi
+
+        # 0.3.0 replaced the logical VACUUM_SIZE_GIB cap with physical
+        # free-space eviction (FREE_MARGIN_MIB). Migrate existing configs:
+        # comment out the now-unused VACUUM_SIZE_GIB (idempotent: the prefix
+        # stops the line from matching next time)...
+        if [ -e /etc/default/journald-archive ] \
+           && grep -q '^[[:space:]]*VACUUM_SIZE_GIB=' /etc/default/journald-archive; then
+            sed -i 's/^\([[:space:]]*VACUUM_SIZE_GIB=\)/# unused since 0.3.0: \1/' \
+                /etc/default/journald-archive
+        fi
+        # ...and append FREE_MARGIN_MIB with a default of ~1/16 of the existing
+        # loopback, so the new knob is discoverable without touching anything else.
+        if [ -e /etc/default/journald-archive ] \
+           && ! grep -q '^[[:space:]]*FREE_MARGIN_MIB=' /etc/default/journald-archive; then
+            margin_mib=0
+            if [ -f "$ARCHIVE_FILE" ]; then
+                margin_mib=$(( $(stat -c %s "$ARCHIVE_FILE") / 1048576 / 16 ))
+            fi
+            [ "$margin_mib" -lt 1 ] && margin_mib=64
+            cat >>/etc/default/journald-archive <<EOF
+
+# Free space to keep available in the archive, in MiB. When free space drops
+# below this, the oldest archived journals are deleted to make room for new
+# ones. Defaults to about 1/16 of the archive size. Raise it if you set a large
+# journald SystemMaxFileSize, so each rotated journal always has room to land.
+FREE_MARGIN_MIB=$margin_mib
+EOF
         fi
         ;;
 esac
