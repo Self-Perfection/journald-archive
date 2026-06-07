@@ -9,9 +9,9 @@ set -euo pipefail
 
 # Grace period (minutes): a rotated file is archived only once it is older
 # than this. Larger values keep more recent history in the fast hot tier;
-# the lower bound also avoids racing journald right after rotation. Defaults
-# to 1, which preserves the behaviour of installs predating this option.
-GRACE_MINUTES="${GRACE_MINUTES:-1}"
+# it also avoids racing journald right after rotation. Defaults to 30 to match
+# the timer interval, so a file is archived only after surviving a full cycle.
+GRACE_MINUTES="${GRACE_MINUTES:-30}"
 case "$GRACE_MINUTES" in
     ''|*[!0-9]*)
         echo "GRACE_MINUTES must be a non-negative integer (got '$GRACE_MINUTES')" >&2

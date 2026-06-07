@@ -6,10 +6,12 @@ journald-archive (0.2.1) UNRELEASED; urgency=low
     /usr/lib/journald-archive/ instead of /usr/sbin. It is a private helper
     invoked by the service, not a user command.
   * Make the archive grace period configurable via GRACE_MINUTES in
-    /etc/default/journald-archive (default 1, preserving previous behaviour).
-    Candidate selection now uses a single name/path/age-filtered find. On
-    upgrade, configs predating the option get GRACE_MINUTES appended (without
-    touching existing values) so the knob is discoverable.
+    /etc/default/journald-archive. It defaults to 30, matching the timer
+    interval, so a rotated file is archived only after surviving a full cycle
+    (the previous hardcoded threshold was 1 minute). Candidate selection now
+    uses a single name/path/age-filtered find. On upgrade, configs predating
+    the option get GRACE_MINUTES appended (without touching existing values)
+    so the knob is discoverable.
 
  -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 15:01:51 +0000
 

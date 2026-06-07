@@ -64,8 +64,8 @@ Minimum age, in minutes, before a rotated journal is moved to the archive.
 Larger values keep more recent history in the fast hot tier (queryable with
 plain
 .BR journalctl );
-the lower bound also avoids racing journald right after rotation. Defaults to
-1 when unset. Examples: 60 (one hour), 1440 (one day).
+it also avoids racing journald right after rotation. Defaults to 30 when
+unset, matching the timer interval. Examples: 60 (one hour), 1440 (one day).
 .PP
 The file is re-read on every invocation, so changes take effect on the next
 timer tick without a daemon reload.

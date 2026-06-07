@@ -70,7 +70,7 @@ Runtime config lives in `/etc/default/journald-archive`:
 ARCHIVE_MOUNT="/var/log/journal_archive"
 ARCHIVE_FILE="/var/log/journal_archive.btrfs"
 VACUUM_SIZE_GIB=10
-GRACE_MINUTES=1            # keep rotated logs hot for N minutes before archiving
+GRACE_MINUTES=30           # keep rotated logs hot for N minutes before archiving
 ```
 
 Edit and run `systemctl restart journald-archive.timer` (or just wait for the
@@ -113,9 +113,10 @@ options and tab-completes like `journalctl`.
   maintenance with logs going to tmpfs.
 
 - The archive timer skips rotated files younger than `GRACE_MINUTES`
-  (default 1). This both avoids racing journald during rotation and lets you
-  keep the most recent rotated logs in the fast hot tier — raise it to keep
-  more recent history queryable with plain `journalctl`.
+  (default 30, matching the timer interval). This both avoids racing journald
+  during rotation and lets you keep the most recent rotated logs in the fast
+  hot tier — raise it to keep more recent history queryable with plain
+  `journalctl`.
 
 - `journalctl --vacuum-size` operates on *logical* (uncompressed) bytes; the
   loopback file size caps the *physical* on-disk usage. As long as
