@@ -14,6 +14,18 @@ case "$1" in
         db_get journald-archive/vacuum_size_gib
         VACUUM_GIB=$RET
 
+        # The config script validates these, but guard anyway so a bad value
+        # (e.g. a hand-preseeded one) fails clearly instead of as a cryptic
+        # `fallocate: invalid length value` further down.
+        is_positive_int() { case "$1" in ''|*[!0-9]*) return 1 ;; *[1-9]*) return 0 ;; *) return 1 ;; esac; }
+        if ! is_positive_int "$LOOPBACK_GIB" || ! is_positive_int "$VACUUM_GIB"; then
+            echo "journald-archive: invalid size configuration" \
+                 "(loopback='$LOOPBACK_GIB', vacuum='$VACUUM_GIB')." >&2
+            echo "Each must be a positive whole number of GiB." \
+                 "Fix with: dpkg-reconfigure journald-archive" >&2
+            exit 1
+        fi
+
         # /var/log/journal must exist for mergerfs to use it as a branch.
         # If absent, create it with journald-style perms; this implicitly
         # enables persistent journaling on Storage=auto.

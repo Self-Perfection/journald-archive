@@ -21,3 +21,9 @@ Description: Archive logical retention limit, in GiB:
  will trigger sooner; the loopback file size is the hard physical cap.
  .
  Default: 5x the loopback size.
+
+Template: journald-archive/invalid_size
+Type: error
+Description: A positive whole number is required
+ The size must be a positive whole number of GiB, with no units or other
+ characters (for example: 2). Please try again.
