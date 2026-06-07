@@ -1,3 +1,31 @@
+journald-archive (0.3.0) unstable; urgency=low
+
+  * Retention is now governed by physical disk space instead of a logical
+    journalctl --vacuum-size cap. The archive keeps as much history as fits in
+    its loopback file, so the actual btrfs compression ratio is discovered and
+    used automatically rather than guessed at install time (the old 5x
+    assumption both wasted space when compression was better and, when it was
+    worse, could stall archiving entirely).
+  * Eviction deletes the oldest archived journals until FREE_MARGIN_MIB of free
+    space is restored. Free space is re-read after each delete with a
+    `btrfs filesystem sync` in between, because btrfs frees extents only on
+    transaction commit and the lagging counter would otherwise cause
+    over-eviction (st_blocks/du report uncompressed size on btrfs, so we cannot
+    account for freed space ourselves).
+  * Add the FREE_MARGIN_MIB knob (default ~1/16 of the archive, capped at half
+    the archive). Drop VACUUM_SIZE_GIB and its debconf question; the install
+    now asks only for the single disk-budget number (the loopback size).
+  * On upgrade, comment out the now-unused VACUUM_SIZE_GIB in existing configs
+    and append FREE_MARGIN_MIB with a sensible default, without touching other
+    values.
+  * Archiving no longer leaves a truncated journal behind when a move fails
+    (e.g. ENOSPC): the partial copy is cleaned up and the move retried next run.
+  * Fix the helper being installed non-executable. Since 0.2.1 moved it under
+    /usr/lib, dh_fixperms left it mode 0644 and the service could not run it;
+    restore the executable bit in debian/rules.
+
+ -- Alexander <alexander.s.m@gmail.com>  Sun, 07 Jun 2026 19:24:23 +0000
+
 journald-archive (0.2.1) unstable; urgency=low
 
   * Drop the redundant manual debconf dependency; it is already pulled in via

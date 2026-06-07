@@ -5,7 +5,6 @@ set -euo pipefail
 . /etc/default/journald-archive
 
 : "${ARCHIVE_MOUNT:?ARCHIVE_MOUNT not set in /etc/default/journald-archive}"
-: "${VACUUM_SIZE_GIB:?VACUUM_SIZE_GIB not set in /etc/default/journald-archive}"
 
 # Grace period (minutes): a rotated file is archived only once it is older
 # than this. Larger values keep more recent history in the fast hot tier;
@@ -24,6 +23,37 @@ if ! mountpoint -q -- "$ARCHIVE_MOUNT"; then
     exit 1
 fi
 
+# Pull one field out of `btrfs filesystem usage -b` (raw bytes). "Free
+# (estimated)" accounts for chunk/metadata overhead better than df does.
+btrfs_usage_field() {
+    btrfs filesystem usage -b "$ARCHIVE_MOUNT" 2>/dev/null \
+        | grep -oP "$1"':\s+\K[0-9]+' | head -1
+}
+
+# Free margin (MiB) to keep available so incoming journals have room without
+# hitting ENOSPC. Falls back to ~1/16 of the archive size if unset (e.g. a
+# config predating the option that has not been migrated yet).
+TOTAL_BYTES=$(btrfs_usage_field 'Device size' || true)
+FREE_MARGIN_MIB="${FREE_MARGIN_MIB:-}"
+if [ -z "$FREE_MARGIN_MIB" ]; then
+    FREE_MARGIN_MIB=$(( ${TOTAL_BYTES:-0} / 1048576 / 16 ))
+fi
+case "$FREE_MARGIN_MIB" in
+    ''|*[!0-9]*)
+        echo "FREE_MARGIN_MIB must be a non-negative integer (got '$FREE_MARGIN_MIB')" >&2
+        exit 1
+        ;;
+esac
+margin_bytes=$(( FREE_MARGIN_MIB * 1048576 ))
+
+# Never let a misconfigured margin wipe the whole archive: cap it at half the
+# device, otherwise the eviction loop below could delete everything chasing an
+# unreachable target.
+if [ -n "${TOTAL_BYTES:-}" ] && [ "$margin_bytes" -gt $(( TOTAL_BYTES / 2 )) ]; then
+    echo "journald-archive: FREE_MARGIN_MIB (${FREE_MARGIN_MIB} MiB) exceeds half the archive; capping" >&2
+    margin_bytes=$(( TOTAL_BYTES / 2 ))
+fi
+
 MACHINE_ID=$(cat /etc/machine-id)
 SRC="/var/log/journal/$MACHINE_ID"
 DST="$ARCHIVE_MOUNT/$MACHINE_ID"
@@ -34,16 +64,42 @@ if [ ! -d "$DST" ]; then
     install -d -m 2755 -o root -g systemd-journal "$DST"
 fi
 
-# Candidates: sealed, rotated journals (name contains '@', never the active
-# system.journal) directly under the machine directory, older than the grace
-# period. -print0/read -d '' keeps this robust regardless of file names.
-moved=0
-while IFS= read -r -d '' f; do
-    if mv -n -- "$f" "$DST/"; then
-        moved=$((moved+1))
+# Eviction: drop the oldest archived journals until at least FREE_MARGIN_MIB is
+# free. We re-read free space after each delete, but btrfs frees extents only on
+# transaction commit, so `btrfs filesystem sync` forces the accounting to settle
+# before we look again — otherwise the lagging counter would make us over-evict.
+# (st_blocks/du can't substitute here: on btrfs they report the uncompressed
+# size, not the compressed on-disk usage, so we cannot account for freed space
+# ourselves — the filesystem is the only source of truth.)
+while :; do
+    free=$(btrfs_usage_field 'Free \(estimated\)')
+    if [ -z "$free" ]; then
+        echo "journald-archive: could not read archive free space; skipping eviction" >&2
+        break
     fi
-done < <(find "$SRC" -maxdepth 1 -type f -name '*@*.journal' -mmin +"$GRACE_MINUTES" -print0)
+    [ "$free" -ge "$margin_bytes" ] && break
 
-if [ "$moved" -gt 0 ]; then
-    journalctl -D "$ARCHIVE_MOUNT" --vacuum-size="${VACUUM_SIZE_GIB}G" --quiet >/dev/null
-fi
+    oldest=$(find "$ARCHIVE_MOUNT" -type f -name '*@*.journal' -printf '%T@ %p\n' \
+             2>/dev/null | sort -n | head -1 | cut -d' ' -f2-)
+    [ -n "$oldest" ] || break   # nothing left to evict
+
+    rm -f -- "$oldest"
+    btrfs filesystem sync "$ARCHIVE_MOUNT" >/dev/null
+done
+
+# Move sealed, rotated journals (name contains '@', never the active
+# system.journal) older than the grace period into the archive. A failed move
+# is almost always ENOSPC; clean up any partial copy and retry next run rather
+# than leaving a truncated journal that journalctl would choke on.
+#
+# Oldest first (by mtime): if not everything fits this run, the leftovers stay
+# in the hot tier, where journald evicts the oldest first — so archive the
+# most-at-risk (oldest) files before journald can drop them.
+while IFS= read -r -d '' f; do
+    base=${f##*/}
+    if ! mv -n -- "$f" "$DST/$base"; then
+        rm -f -- "$DST/$base"
+        echo "journald-archive: could not archive $base (likely out of space); will retry" >&2
+    fi
+done < <(find "$SRC" -maxdepth 1 -type f -name '*@*.journal' -mmin +"$GRACE_MINUTES" \
+             -printf '%T@\t%p\0' | sort -zn | cut -z -f2-)

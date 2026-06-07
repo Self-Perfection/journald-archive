@@ -1,26 +1,19 @@
 Template: journald-archive/loopback_size_gib
 Type: string
-Description: Archive loopback file size, in GiB:
+Description: Archive disk budget, in GiB:
  journald-archive stores compressed journals in a btrfs loopback file
- mounted at /var/log/journal_archive/. This is the maximum *physical*
- size on disk that the archive can ever occupy.
+ mounted at /var/log/journal_archive/. This number is that file's size:
+ the maximum *physical* disk space the archive will ever occupy, and the
+ only capacity knob you need to set.
  .
- The suggested default has been computed from the current size of
- /var/log/journal/, assuming a conservative 5x btrfs zstd compression
- ratio. Increase it if you want room for more history; decrease only
- if disk space is tight.
-
-Template: journald-archive/vacuum_size_gib
-Type: string
-Description: Archive logical retention limit, in GiB:
- `journalctl --vacuum-size` controls how much *uncompressed* journal
- data to keep in the archive. Because btrfs typically compresses
- journals 5-10x, this can safely be larger than the loopback size.
+ How much history this buys depends on how well your logs compress, which
+ is discovered automatically: when the archive fills up, the oldest
+ journals are dropped to stay within this budget. Better compression
+ simply keeps more history in the same space.
  .
- If the actual compression ratio turns out worse than expected, vacuum
- will trigger sooner; the loopback file size is the hard physical cap.
- .
- Default: 5x the loopback size.
+ The suggested default is computed from the current size of
+ /var/log/journal/, assuming a conservative 5x compression ratio.
+ Increase it for more history; decrease only if disk space is tight.
 
 Template: journald-archive/invalid_size
 Type: error

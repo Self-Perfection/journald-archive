@@ -1,4 +1,4 @@
-.TH JOURNALD-ARCHIVE 8 "2026-06-07" "journald-archive 0.2.1" "System Administration"
+.TH JOURNALD-ARCHIVE 8 "2026-06-07" "journald-archive 0.3.0" "System Administration"
 .SH NAME
 journald-archive \- move rotated systemd journals to a compressed archive
 .SH SYNOPSIS
@@ -19,6 +19,12 @@ On each invocation it:
 verifies that the archive mount point is an actual mount point and aborts
 otherwise (to avoid filling the root filesystem);
 .IP \(bu 3
+if the archive has less than
+.B FREE_MARGIN_MIB
+free, deletes the oldest archived journals until that much space is available
+again, so incoming files have room (see
+.BR FREE_MARGIN_MIB );
+.IP \(bu 3
 moves every rotated
 .RI ( *@*.journal )
 file older than the configured grace period (see
@@ -27,15 +33,18 @@ from the active machine's journal directory into
 the corresponding directory under the archive (a cross-filesystem move, which
 recompresses the data via the archive's
 .B compress\-force=zstd
-mount option);
-.IP \(bu 3
-if anything was moved, runs
-.B journalctl \-\-vacuum\-size
-against the archive to enforce the configured logical retention limit.
+mount option).
 .PP
 Active (currently written) journal files are never touched. The grace period
 both avoids racing journald during rotation and keeps the most recently
 rotated logs in the fast hot tier.
+.PP
+Retention is governed by physical disk space, not by a fixed time or logical
+size: the archive keeps as much history as fits in its loopback file, so better
+compression automatically yields more retained history. There is consequently
+no guaranteed minimum retention period \(em under a fixed disk budget a burst of
+logs can always push the oldest history out. Size the loopback file to bound
+retention by disk.
 .PP
 .B journald-archive
 takes no arguments and is normally invoked by
@@ -54,10 +63,14 @@ Mount point of the compressed archive. Default
 Backing btrfs loopback file. Default
 .IR /var/log/journal_archive.btrfs .
 .TP
-.B VACUUM_SIZE_GIB
-Logical (uncompressed) size cap passed to
-.BR "journalctl \-\-vacuum\-size" .
-This bounds the amount of journal data retained in the archive.
+.B FREE_MARGIN_MIB
+Free space, in MiB, to keep available in the archive. When free space falls
+below this, the oldest archived journals are deleted until it is restored,
+making room for incoming files. Defaults to about 1/16 of the archive size when
+unset. Raise it if journald's
+.B SystemMaxFileSize
+is large, so that a single rotated journal always fits; it is capped at half the
+archive to keep a misconfigured value from emptying it.
 .TP
 .B GRACE_MINUTES
 Minimum age, in minutes, before a rotated journal is moved to the archive.

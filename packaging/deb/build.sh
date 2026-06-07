@@ -3,9 +3,10 @@
 #
 # dpkg-buildpackage requires debian/ to sit at the root of the build tree,
 # alongside the sources it installs. In this repo the portable core
-# (sbin/, systemd/) lives at the repo root while the Debian packaging lives
-# under packaging/deb/. We reconcile that by assembling a flat build tree in
-# a temporary directory: core + debian/ side by side, then build there.
+# (libexec/, bin/, systemd/, completions) lives at the repo root while the
+# Debian packaging lives under packaging/deb/. We reconcile that by assembling
+# a flat build tree in a temporary directory: core + debian/ side by side,
+# then build there.
 #
 # The resulting .deb is moved into ./dist/. Nothing is written back into the
 # source tree, so the same core can be wrapped by other packaging methods.

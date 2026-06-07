@@ -32,16 +32,12 @@ ask_positive_int() {
     done
 }
 
-# Heuristic for loopback size: ceil(current journal / 5 / GiB), min 1
+# Heuristic for the archive's physical budget: ceil(current journal / 5 / GiB),
+# min 1. Assuming a conservative 5x btrfs zstd ratio, this is roughly enough to
+# hold today's journal compressed; better compression simply buys more history.
 JOURNAL_BYTES=$(find /var/log/journal -name '*.journal' -printf '%s\n' 2>/dev/null \
                 | awk '{s+=$1} END {print s+0}')
 LOOPBACK_DEFAULT=$(( (JOURNAL_BYTES / 5 + (1<<30) - 1) / (1<<30) ))
 [ "$LOOPBACK_DEFAULT" -lt 1 ] && LOOPBACK_DEFAULT=1
 
 ask_positive_int journald-archive/loopback_size_gib high "$LOOPBACK_DEFAULT"
-
-# Vacuum default depends on the (now validated) loopback answer.
-db_get journald-archive/loopback_size_gib
-VACUUM_DEFAULT=$(( RET * 5 ))
-
-ask_positive_int journald-archive/vacuum_size_gib medium "$VACUUM_DEFAULT"
