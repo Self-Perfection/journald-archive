@@ -1,0 +1,54 @@
+#!/bin/bash
+set -e
+
+. /usr/share/debconf/confmodule
+
+ARCHIVE_FILE="/var/log/journal_archive.btrfs"
+ARCHIVE_MOUNT="/var/log/journal_archive"
+COMBINED_MOUNT="/var/log/journal_combined"
+
+case "$1" in
+    configure)
+        db_get journald-archive/loopback_size_gib
+        LOOPBACK_GIB=$RET
+        db_get journald-archive/vacuum_size_gib
+        VACUUM_GIB=$RET
+
+        # /var/log/journal must exist for mergerfs to use it as a branch.
+        # If absent, create it with journald-style perms; this implicitly
+        # enables persistent journaling on Storage=auto.
+        if [ ! -d /var/log/journal ]; then
+            install -d -m 2755 -o root -g systemd-journal /var/log/journal
+        fi
+
+        install -d -m 2755 -o root -g systemd-journal "$ARCHIVE_MOUNT"
+        install -d -m 2755 -o root -g systemd-journal "$COMBINED_MOUNT"
+
+        if [ ! -f "$ARCHIVE_FILE" ]; then
+            fallocate -l "${LOOPBACK_GIB}GiB" "$ARCHIVE_FILE"
+            chmod 600 "$ARCHIVE_FILE"
+            mkfs.btrfs -q "$ARCHIVE_FILE"
+        elif ! blkid -o value -s TYPE "$ARCHIVE_FILE" 2>/dev/null | grep -qx btrfs; then
+            echo "WARNING: $ARCHIVE_FILE exists but is not btrfs. Leaving untouched." >&2
+        fi
+
+        # Generate runtime config only on first install. Subsequent edits stay.
+        if [ ! -e /etc/default/journald-archive ]; then
+            cat >/etc/default/journald-archive <<EOF
+# journald-archive runtime configuration.
+# This file was generated on first install from debconf answers.
+# Edit freely; it will not be overwritten by package upgrades.
+# To reset to debconf defaults: rm this file and run \`dpkg-reconfigure journald-archive\`.
+
+ARCHIVE_MOUNT="$ARCHIVE_MOUNT"
+ARCHIVE_FILE="$ARCHIVE_FILE"
+VACUUM_SIZE_GIB=$VACUUM_GIB
+EOF
+            chmod 644 /etc/default/journald-archive
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

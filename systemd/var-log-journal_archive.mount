@@ -1,0 +1,12 @@
+[Unit]
+Description=Compressed btrfs archive for old journal files
+ConditionPathExists=/var/log/journal_archive.btrfs
+
+[Mount]
+What=/var/log/journal_archive.btrfs
+Where=/var/log/journal_archive
+Type=btrfs
+Options=loop,compress-force=zstd:8
+
+[Install]
+WantedBy=local-fs.target

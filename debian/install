@@ -1,0 +1,5 @@
+sbin/journald-archive                          usr/sbin
+systemd/journald-archive.service               usr/lib/systemd/system
+systemd/journald-archive.timer                 usr/lib/systemd/system
+systemd/var-log-journal_archive.mount          usr/lib/systemd/system
+systemd/var-log-journal_combined.mount         usr/lib/systemd/system

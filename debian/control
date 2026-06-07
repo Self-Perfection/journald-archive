@@ -1,0 +1,22 @@
+Source: journald-archive
+Section: admin
+Priority: optional
+Maintainer: Alexander <alexander.s.m@gmail.com>
+Build-Depends: debhelper-compat (= 12)
+Standards-Version: 4.5.0
+
+Package: journald-archive
+Architecture: all
+Depends: ${misc:Depends},
+         systemd,
+         mergerfs,
+         btrfs-progs,
+         debconf
+Description: Tiered storage for systemd-journald logs
+ Moves rotated journal files from /var/log/journal/ (hot, uncompressed)
+ to /var/log/journal_archive/ (cold, btrfs+zstd) on a systemd timer,
+ then exposes the union via mergerfs at /var/log/journal_combined/.
+ .
+ The hot tier stays small, so plain `journalctl` is fast on recent data.
+ The cold tier benefits from btrfs zstd compression for long history.
+ Use `journalctl -D /var/log/journal_combined` for full-history queries.

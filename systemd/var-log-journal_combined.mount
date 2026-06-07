@@ -1,0 +1,15 @@
+[Unit]
+Description=Read-only mergerfs view of journal + archive
+After=var-log-journal_archive.mount
+RequiresMountsFor=/var/log/journal_archive
+ConditionPathIsDirectory=/var/log/journal
+ConditionPathIsDirectory=/var/log/journal_archive
+
+[Mount]
+What=/var/log/journal=RO:/var/log/journal_archive=RO
+Where=/var/log/journal_combined
+Type=fuse.mergerfs
+Options=allow_other,use_ino,category.create=ff,default_permissions
+
+[Install]
+WantedBy=local-fs.target

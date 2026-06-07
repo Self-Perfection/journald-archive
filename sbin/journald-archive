@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+
+# shellcheck source=/dev/null
+. /etc/default/journald-archive
+
+: "${ARCHIVE_MOUNT:?ARCHIVE_MOUNT not set in /etc/default/journald-archive}"
+: "${VACUUM_SIZE_GIB:?VACUUM_SIZE_GIB not set in /etc/default/journald-archive}"
+
+if ! mountpoint -q -- "$ARCHIVE_MOUNT"; then
+    echo "$ARCHIVE_MOUNT is not a mount point — aborting to avoid writing onto rootfs" >&2
+    exit 1
+fi
+
+MACHINE_ID=$(cat /etc/machine-id)
+SRC="/var/log/journal/$MACHINE_ID"
+DST="$ARCHIVE_MOUNT/$MACHINE_ID"
+
+[ -d "$SRC" ] || exit 0
+
+if [ ! -d "$DST" ]; then
+    install -d -m 2755 -o root -g systemd-journal "$DST"
+fi
+
+shopt -s nullglob
+moved=0
+for f in "$SRC"/*@*.journal; do
+    # Skip files journald may still be finalizing (<60s old).
+    [ -n "$(find "$f" -mmin +1 -print 2>/dev/null)" ] || continue
+    if mv -n -- "$f" "$DST/"; then
+        moved=$((moved+1))
+    fi
+done
+
+if [ "$moved" -gt 0 ]; then
+    journalctl -D "$ARCHIVE_MOUNT" --vacuum-size="${VACUUM_SIZE_GIB}G" --quiet >/dev/null
+fi

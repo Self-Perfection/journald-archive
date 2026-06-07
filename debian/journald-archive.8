@@ -1,0 +1,80 @@
+.TH JOURNALD-ARCHIVE 8 "2026-05-27" "journald-archive 0.1.0" "System Administration"
+.SH NAME
+journald-archive \- move rotated systemd journals to a compressed archive
+.SH SYNOPSIS
+.B journald-archive
+.SH DESCRIPTION
+.B journald-archive
+implements a tiered storage scheme for systemd-journald logs.
+It moves rotated, sealed journal files out of the hot tier
+.RI ( /var/log/journal/ )
+into a compressed btrfs archive
+.RI ( /var/log/journal_archive/ ),
+keeping the hot tier small so that ordinary
+.BR journalctl (1)
+queries stay fast.
+.PP
+On each invocation it:
+.IP \(bu 3
+verifies that the archive mount point is an actual mount point and aborts
+otherwise (to avoid filling the root filesystem);
+.IP \(bu 3
+moves every rotated
+.RI ( *@*.journal )
+file older than one minute from the active machine's journal directory into
+the corresponding directory under the archive (a cross-filesystem move, which
+recompresses the data via the archive's
+.B compress\-force=zstd
+mount option);
+.IP \(bu 3
+if anything was moved, runs
+.B journalctl \-\-vacuum\-size
+against the archive to enforce the configured logical retention limit.
+.PP
+Active (currently written) journal files are never touched. The one-minute
+age threshold avoids racing journald during rotation.
+.PP
+.B journald-archive
+takes no arguments and is normally invoked by
+.BR journald-archive.timer (5)
+every 30 minutes, not run by hand.
+.SH CONFIGURATION
+Runtime configuration is read from
+.IR /etc/default/journald-archive .
+The following variables are recognised:
+.TP
+.B ARCHIVE_MOUNT
+Mount point of the compressed archive. Default
+.IR /var/log/journal_archive .
+.TP
+.B ARCHIVE_FILE
+Backing btrfs loopback file. Default
+.IR /var/log/journal_archive.btrfs .
+.TP
+.B VACUUM_SIZE_GIB
+Logical (uncompressed) size cap passed to
+.BR "journalctl \-\-vacuum\-size" .
+This bounds the amount of journal data retained in the archive.
+.PP
+The file is re-read on every invocation, so changes take effect on the next
+timer tick without a daemon reload.
+.SH EXIT STATUS
+Exits zero on success, including when there is nothing to move. Exits non-zero
+if the archive mount point is not mounted or a fatal error occurs.
+.SH FILES
+.TP
+.I /etc/default/journald-archive
+Runtime configuration.
+.TP
+.I /var/log/journal_archive.btrfs
+Compressed btrfs loopback backing the archive.
+.TP
+.I /var/log/journal_archive/
+Archive mount point (cold tier).
+.SH SEE ALSO
+.BR journalctl (1),
+.BR systemd-journald.service (8),
+.BR journald.conf (5),
+.BR mergerfs (1)
+.SH AUTHOR
+Alexander <alexander.s.m@gmail.com>

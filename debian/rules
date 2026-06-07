@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# Pure-data package; nothing to build/configure/test/install via auto-targets.
+# Overrides are required because the top-level Makefile (build helper, not a
+# build system) would otherwise be detected and invoked recursively.
+override_dh_auto_clean:
+override_dh_auto_configure:
+override_dh_auto_build:
+override_dh_auto_test:
+override_dh_auto_install:
+
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start journald-archive.service
+	dh_installsystemd journald-archive.timer
+	dh_installsystemd --no-restart-on-upgrade var-log-journal_archive.mount var-log-journal_combined.mount

@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+# Stopping the timer, service and mount units on remove is handled by the
+# dh_installsystemd-generated snippet expanded below.
+
+#DEBHELPER#
+
+exit 0

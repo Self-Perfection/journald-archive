@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+ARCHIVE_FILE="/var/log/journal_archive.btrfs"
+ARCHIVE_MOUNT="/var/log/journal_archive"
+COMBINED_MOUNT="/var/log/journal_combined"
+
+case "$1" in
+    purge)
+        # The mount/service/timer units were already stopped on remove by the
+        # dh_installsystemd-generated prerm snippet; nothing to stop here.
+        rm -f /etc/default/journald-archive
+
+        # Empty mount points only; never the loopback file (contains user data).
+        rmdir "$COMBINED_MOUNT" 2>/dev/null || true
+        rmdir "$ARCHIVE_MOUNT" 2>/dev/null || true
+
+        if [ -f "$ARCHIVE_FILE" ]; then
+            echo "Note: $ARCHIVE_FILE preserved. Remove manually if no longer needed." >&2
+        fi
+
+        if [ -e /usr/share/debconf/confmodule ]; then
+            . /usr/share/debconf/confmodule
+            db_purge
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

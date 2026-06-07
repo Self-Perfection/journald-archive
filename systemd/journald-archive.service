@@ -1,0 +1,11 @@
+[Unit]
+Description=Move rotated journal files to compressed archive
+RequiresMountsFor=/var/log/journal_archive
+After=var-log-journal_archive.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/journald-archive
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
