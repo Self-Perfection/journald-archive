@@ -1,0 +1,6 @@
+#compdef journalctl-all
+# zsh completion for journalctl-all -- reuse journalctl's own completion.
+#
+# journalctl-all is a pass-through wrapper, so delegate to journalctl's zsh
+# completion function (_journalctl), which zsh autoloads from fpath on demand.
+_journalctl "$@"

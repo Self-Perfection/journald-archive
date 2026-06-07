@@ -28,6 +28,7 @@ should match what the core expects:
 - `sbin/journald-archive` → `/usr/sbin/journald-archive`
 - `bin/journalctl-all` → `/usr/bin/journalctl-all`
 - `bash-completion/journalctl-all` → `/usr/share/bash-completion/completions/journalctl-all`
+- `zsh-completion/_journalctl-all` → `/usr/share/zsh/vendor-completions/_journalctl-all`
 - `systemd/*` → `/usr/lib/systemd/system/`
 
 and the package should depend on `systemd`, `mergerfs`, and `btrfs-progs`.

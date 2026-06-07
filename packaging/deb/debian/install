@@ -1,6 +1,7 @@
 sbin/journald-archive                          usr/sbin
 bin/journalctl-all                             usr/bin
 bash-completion/journalctl-all                 usr/share/bash-completion/completions
+zsh-completion/_journalctl-all                 usr/share/zsh/vendor-completions
 systemd/journald-archive.service               usr/lib/systemd/system
 systemd/journald-archive.timer                 usr/lib/systemd/system
 systemd/var-log-journal_archive.mount          usr/lib/systemd/system
