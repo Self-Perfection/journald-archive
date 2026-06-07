@@ -63,6 +63,20 @@ GRACE_MINUTES=1
 EOF
             chmod 644 /etc/default/journald-archive
         fi
+
+        # Surface knobs added in later versions in an existing config, without
+        # touching the user's values. Upgrades from before GRACE_MINUTES get it
+        # appended with its default; the grep guard keeps this idempotent.
+        if [ -e /etc/default/journald-archive ] \
+           && ! grep -q '^[[:space:]]*GRACE_MINUTES=' /etc/default/journald-archive; then
+            cat >>/etc/default/journald-archive <<'GRACEEOF'
+
+# Grace period in minutes: a rotated journal is archived only once it is older
+# than this. Larger values keep more recent history in the fast hot tier,
+# queryable with plain `journalctl`. Examples: 60 = 1 hour, 1440 = 1 day.
+GRACE_MINUTES=1
+GRACEEOF
+        fi
         ;;
 esac
 
