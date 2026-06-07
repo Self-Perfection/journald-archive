@@ -10,8 +10,7 @@ Architecture: all
 Depends: ${misc:Depends},
          systemd,
          mergerfs,
-         btrfs-progs,
-         debconf
+         btrfs-progs
 Description: Tiered storage for systemd-journald logs
  Moves rotated journal files from /var/log/journal/ (hot, uncompressed)
  to /var/log/journal_archive/ (cold, btrfs+zstd) on a systemd timer,
