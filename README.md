@@ -144,3 +144,8 @@ options and tab-completes like `journalctl`.
   adopt it, stop the mount, delete (or rename) the loopback file, and let the
   next `dpkg-reconfigure journald-archive` / reinstall recreate it — this
   **discards existing archived history**.
+
+## Development
+
+Functional tests live in [`tests/`](tests) (run on a disposable root VM); the
+release process is in [`RELEASING.md`](RELEASING.md).
