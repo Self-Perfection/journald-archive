@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/bin/sh
 # journalctl over the combined hot+archive view.
 #
 # Thin wrapper around `journalctl --directory=/var/log/journal_combined`,
 # the read-only mergerfs union of the live journal and the compressed
 # archive. All arguments are passed through unchanged, so it behaves exactly
 # like journalctl but queries the full history instead of only the hot tier.
-set -euo pipefail
+set -eu
 
 COMBINED="/var/log/journal_combined"
 

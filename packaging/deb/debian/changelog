@@ -1,3 +1,15 @@
+journald-archive (0.3.2) unstable; urgency=low
+
+  * Use a POSIX sh shebang (#!/bin/sh) for the scripts that do not need bash:
+    the four Debian maintainer scripts (postinst, postrm, prerm, config) and
+    the journalctl-all wrapper. None used bash-specific syntax. The wrapper
+    also drops its no-op `set -o pipefail` (it runs no pipelines), keeping
+    `set -eu`. No bash dependency is added: bash is Essential, and the only
+    script that still needs it — the private timer helper, which relies on
+    process substitution and NUL-delimited `read -d` — keeps its bash shebang.
+
+ -- Alexander <alexander.s.m@gmail.com>  Mon, 08 Jun 2026 12:24:12 +0000
+
 journald-archive (0.3.1) unstable; urgency=low
 
   * Fix journalctl-all failing with "No journal files were opened due to

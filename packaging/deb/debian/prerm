@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # Stopping the timer, service and mount units on remove is handled by the
