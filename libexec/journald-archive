@@ -79,8 +79,15 @@ while :; do
     fi
     [ "$free" -ge "$margin_bytes" ] && break
 
-    oldest=$(find "$ARCHIVE_MOUNT" -type f -name '*@*.journal' -printf '%T@ %p\n' \
-             2>/dev/null | sort -n | head -1 | cut -d' ' -f2-)
+    # Oldest archived journal by mtime. Capture the whole sorted list and take
+    # its first line in the shell — NOT `... | sort -n | head -1`: under
+    # `set -o pipefail`, head closing the pipe after one line makes sort exit on
+    # SIGPIPE (141) once the listing outgrows the pipe buffer, and `set -e` would
+    # then abort the script here, before anything is ever evicted.
+    listing=$(find "$ARCHIVE_MOUNT" -type f -name '*@*.journal' -printf '%T@ %p\n' \
+              2>/dev/null | sort -n)
+    oldest=${listing%%$'\n'*}   # first (oldest) line, or "" if none
+    oldest=${oldest#* }         # strip the "<mtime> " prefix, leaving the path
     [ -n "$oldest" ] || break   # nothing left to evict
 
     rm -f -- "$oldest"
