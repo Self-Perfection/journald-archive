@@ -133,3 +133,14 @@ options and tab-completes like `journalctl`.
 - The loopback file `/var/log/journal_archive.btrfs` holds your archived
   journals and is never removed by uninstallation. Delete it manually if you
   no longer want the history.
+
+- Archives up to 5 GiB are created with btrfs **mixed block groups** (single
+  data and metadata), which packs noticeably more into the loopback: btrfs
+  otherwise reserves a separate, DUP-duplicated metadata block group that data
+  cannot borrow from (~10% of a 1 GiB archive). The cost is single, non-DUP
+  metadata — no bad-sector redundancy, which is fine for a log store on a host
+  filesystem that has its own. Mixed mode is set at creation and cannot be
+  converted in place, so archives created before 0.3.3 keep the old layout; to
+  adopt it, stop the mount, delete (or rename) the loopback file, and let the
+  next `dpkg-reconfigure journald-archive` / reinstall recreate it — this
+  **discards existing archived history**.

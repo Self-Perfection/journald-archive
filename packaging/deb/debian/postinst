@@ -39,7 +39,20 @@ case "$1" in
         if [ ! -f "$ARCHIVE_FILE" ]; then
             fallocate -l "${LOOPBACK_GIB}GiB" "$ARCHIVE_FILE"
             chmod 600 "$ARCHIVE_FILE"
-            mkfs.btrfs -q "$ARCHIVE_FILE"
+            # Mixed block groups store data and metadata together, so the
+            # archive isn't carved into a separate (over-reserved, DUP)
+            # metadata block group that data can't borrow from. On a 1 GiB
+            # archive that reclaims ~10% of capacity; metadata becomes single,
+            # trading bad-sector redundancy for space — fine for a loopback log
+            # store whose host filesystem provides its own resilience. mkfs no
+            # longer auto-enables mixed since btrfs-progs 4.3, so request it
+            # explicitly. Above btrfs's ~5 GiB soft recommendation, fall back to
+            # the default layout to avoid mixed-mode performance degradation.
+            if [ "$LOOPBACK_GIB" -le 5 ]; then
+                mkfs.btrfs -q --mixed --metadata single --data single "$ARCHIVE_FILE"
+            else
+                mkfs.btrfs -q "$ARCHIVE_FILE"
+            fi
         elif ! blkid -o value -s TYPE "$ARCHIVE_FILE" 2>/dev/null | grep -qx btrfs; then
             echo "WARNING: $ARCHIVE_FILE exists but is not btrfs. Leaving untouched." >&2
         fi
