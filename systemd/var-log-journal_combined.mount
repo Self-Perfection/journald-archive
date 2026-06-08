@@ -9,7 +9,7 @@ ConditionPathIsDirectory=/var/log/journal_archive
 What=/var/log/journal=RO:/var/log/journal_archive=RO
 Where=/var/log/journal_combined
 Type=fuse.mergerfs
-Options=allow_other,use_ino,category.create=ff,default_permissions
+Options=allow_other,use_ino,category.create=ff,default_permissions,posix_acl=true
 
 [Install]
 WantedBy=local-fs.target

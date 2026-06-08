@@ -21,4 +21,10 @@ override_dh_fixperms:
 override_dh_installsystemd:
 	dh_installsystemd --no-enable --no-start journald-archive.service
 	dh_installsystemd journald-archive.timer
-	dh_installsystemd --no-restart-on-upgrade var-log-journal_archive.mount var-log-journal_combined.mount
+	# The archive mount backs a btrfs loopback the timer/service hold open;
+	# remounting it on upgrade is disruptive, so leave it running untouched.
+	dh_installsystemd --no-restart-on-upgrade var-log-journal_archive.mount
+	# The combined union is a stateless read-only mergerfs view, so restart it
+	# on upgrade — otherwise changes to its mount options (e.g. posix_acl) only
+	# take effect after a reboot or a manual remount.
+	dh_installsystemd var-log-journal_combined.mount

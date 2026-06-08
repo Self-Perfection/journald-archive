@@ -1,3 +1,19 @@
+journald-archive (0.3.1) unstable; urgency=low
+
+  * Fix journalctl-all failing with "No journal files were opened due to
+    insufficient permissions" for non-root users in adm/wheel. The mergerfs
+    union did not propagate the POSIX ACLs systemd-journald sets on journal
+    files, so the kernel saw only the bare 0640 root:systemd-journal mode and
+    denied access — even though the same files were readable directly on the hot
+    tier. Mount the combined view with posix_acl=true so ACLs are honoured.
+  * Remount the combined union on package upgrade. It was installed with
+    --no-restart-on-upgrade, so mount-option changes (like the posix_acl fix
+    above) would not have taken effect until a reboot. The union is a stateless
+    read-only view, so remounting it is safe; the btrfs archive mount stays
+    --no-restart-on-upgrade as remounting that loopback mid-operation is not.
+
+ -- Alexander <alexander.s.m@gmail.com>  Mon, 08 Jun 2026 01:08:45 +0000
+
 journald-archive (0.3.0) unstable; urgency=low
 
   * Retention is now governed by physical disk space instead of a logical
