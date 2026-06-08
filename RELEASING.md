@@ -31,6 +31,20 @@ distribution (`unstable`), **not** `UNRELEASED`, and its version must equal the
 tag you are about to push. Update the date (`date -R`). A stale `UNRELEASED`
 both ships in the `.deb` and fails the release workflow's gate.
 
+Pick `urgency` to match the release, don't just copy the previous entry — it is
+the changelog's one-word statement of how much a user should care:
+
+- `urgency=low` — cleanup, docs, optimization, refactors: nothing that changes
+  behaviour for a working install (e.g. the 0.3.2 shebang and 0.3.3 space
+  changes).
+- `urgency=medium` — bug fixes, especially anything that affected a core or
+  user-visible path (e.g. the 0.3.4 eviction fix). "Worth upgrading for."
+- `urgency=high` — data loss, corruption, or security: staying on the old
+  version risks losing logs or worse.
+
+(In a Debian archive `urgency` also sets the unstable→testing migration delay;
+here it is effectively just that human signal, but keep it honest anyway.)
+
 ## 3. Commit, tag, push
 
 ```bash
