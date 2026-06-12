@@ -2,6 +2,7 @@
 Description=Move rotated journal files to compressed archive
 RequiresMountsFor=/var/log/journal_archive
 After=var-log-journal_archive.mount
+AssertPathIsMountPoint=/var/log/journal_archive
 
 [Service]
 Type=oneshot

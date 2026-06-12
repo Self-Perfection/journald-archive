@@ -1,3 +1,18 @@
+journald-archive (0.3.5) unstable; urgency=low
+
+  * Refuse to start the archival service unless the archive is actually
+    mounted, enforced declaratively at the systemd layer via
+    `AssertPathIsMountPoint=/var/log/journal_archive`. The unit already pulled
+    the mount in with `RequiresMountsFor=`, but the mount unit is *skipped*
+    (not failed) when its loopback file is missing, and a skipped mount still
+    satisfies `Requires=` — so the service would start anyway and only the
+    helper's own `mountpoint` guard stopped it, surfacing as a failed run every
+    timer cycle. The assertion now rejects the start up front, before the
+    helper runs. The script's runtime `mountpoint` guard stays as defense in
+    depth for manual invocations.
+
+ -- Alexander <alexander.s.m@gmail.com>  Fri, 12 Jun 2026 00:30:33 +0000
+
 journald-archive (0.3.4) unstable; urgency=low
 
   * Fix archive eviction aborting without freeing any space once the archive
