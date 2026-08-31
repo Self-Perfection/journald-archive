@@ -26,7 +26,9 @@ again, so incoming files have room (see
 .BR FREE_MARGIN_MIB );
 .IP \(bu 3
 moves every rotated
-.RI ( *@*.journal )
+.RI ( *@*.journal ),
+or disposed-of
+.RI ( *@*.journal~ ),
 file older than the configured grace period (see
 .BR GRACE_MINUTES )
 from the active machine's journal directory into
@@ -35,7 +37,15 @@ recompresses the data via the archive's
 .B compress\-force=zstd
 mount option).
 .PP
-Active (currently written) journal files are never touched. The grace period
+Active (currently written) journal files are never touched: journald appends
+only to names without an
+.RB \(dq @ \(dq,
+which is what both the eviction and the move above match on. Files journald has
+disposed of \(em renamed to
+.I *.journal~
+because it could not use them \(em are sealed, still readable by
+.BR journalctl (1),
+and so are archived like rotated ones. The grace period
 both avoids racing journald during rotation and keeps the most recently
 rotated logs in the fast hot tier.
 .PP

@@ -28,3 +28,24 @@ sudo tests/eviction.sh /path/to/helper       # or a specific helper
 ```
 
 Exit code 0 = PASS. Takes ~30 s (writes a few hundred MiB through zstd).
+
+## `disposed-journal.sh`
+
+Regression test for journald's `*.journal~` files: when journald cannot use a
+journal file it renames it to `<prefix>@<id>-<id>.journal~` and opens a fresh
+one. Those files are sealed and `journalctl` still reads them, but the helper's
+`find` patterns matched only `*@*.journal`, so they were never archived — and
+had one reached the archive, eviction could not have reclaimed it either.
+
+The test asserts both halves against a throwaway archive: a `.journal~` file in
+the hot tier is moved into the archive, and the oldest archived `.journal~` file
+is evicted when the archive fills. It also drops two throwaway journal-named
+files into the real `/var/log/journal/<machine-id>/` (removed on exit), so it is
+even more firmly VM-only than `eviction.sh`.
+
+```bash
+sudo tests/disposed-journal.sh               # tests ../libexec/journald-archive
+sudo tests/disposed-journal.sh /path/to/helper
+```
+
+Exit code 0 = PASS. Takes ~20 s.

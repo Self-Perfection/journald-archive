@@ -54,6 +54,19 @@ if [ -n "${TOTAL_BYTES:-}" ] && [ "$margin_bytes" -gt $(( TOTAL_BYTES / 2 )) ]; 
     margin_bytes=$(( TOTAL_BYTES / 2 ))
 fi
 
+# Which files we consider archivable journals, used by BOTH the eviction and
+# the move loop below (keep them in sync: archiving a shape we never evict
+# would fill the archive with files eviction can't reclaim).
+#
+# journald names a rotated journal "<prefix>@<seq>-<realtime>.journal". A file
+# it had to dispose of — corrupt, or written by a version whose features it
+# cannot handle — is renamed to "<prefix>@<id>-<id>.journal~" and left in
+# place. Both are sealed: journald only ever appends to "<prefix>.journal",
+# which has no '@' and is what the '@' in the pattern keeps out. journalctl
+# reads .journal~ files like any other, so they carry real history and belong
+# in the archive rather than being left for journald's vacuum to delete.
+JOURNAL_MATCH=( -name '*@*.journal' -o -name '*@*.journal~' )
+
 MACHINE_ID=$(cat /etc/machine-id)
 SRC="/var/log/journal/$MACHINE_ID"
 DST="$ARCHIVE_MOUNT/$MACHINE_ID"
@@ -84,8 +97,8 @@ while :; do
     # `set -o pipefail`, head closing the pipe after one line makes sort exit on
     # SIGPIPE (141) once the listing outgrows the pipe buffer, and `set -e` would
     # then abort the script here, before anything is ever evicted.
-    listing=$(find "$ARCHIVE_MOUNT" -type f -name '*@*.journal' -printf '%T@ %p\n' \
-              2>/dev/null | sort -n)
+    listing=$(find "$ARCHIVE_MOUNT" -type f \( "${JOURNAL_MATCH[@]}" \) \
+              -printf '%T@ %p\n' 2>/dev/null | sort -n)
     oldest=${listing%%$'\n'*}   # first (oldest) line, or "" if none
     oldest=${oldest#* }         # strip the "<mtime> " prefix, leaving the path
     [ -n "$oldest" ] || break   # nothing left to evict
@@ -94,10 +107,11 @@ while :; do
     btrfs filesystem sync "$ARCHIVE_MOUNT" >/dev/null
 done
 
-# Move sealed, rotated journals (name contains '@', never the active
-# system.journal) older than the grace period into the archive. A failed move
-# is almost always ENOSPC; clean up any partial copy and retry next run rather
-# than leaving a truncated journal that journalctl would choke on.
+# Move sealed journals (rotated, or disposed-of '.journal~' ones — see
+# JOURNAL_MATCH; never the active system.journal) older than the grace period
+# into the archive. A failed move is almost always ENOSPC; clean up any partial
+# copy and retry next run rather than leaving a truncated journal that
+# journalctl would choke on.
 #
 # Oldest first (by mtime): if not everything fits this run, the leftovers stay
 # in the hot tier, where journald evicts the oldest first — so archive the
@@ -108,5 +122,5 @@ while IFS= read -r -d '' f; do
         rm -f -- "$DST/$base"
         echo "journald-archive: could not archive $base (likely out of space); will retry" >&2
     fi
-done < <(find "$SRC" -maxdepth 1 -type f -name '*@*.journal' -mmin +"$GRACE_MINUTES" \
-             -printf '%T@\t%p\0' | sort -zn | cut -z -f2-)
+done < <(find "$SRC" -maxdepth 1 -type f \( "${JOURNAL_MATCH[@]}" \) \
+             -mmin +"$GRACE_MINUTES" -printf '%T@\t%p\0' | sort -zn | cut -z -f2-)

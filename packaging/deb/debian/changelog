@@ -1,3 +1,18 @@
+journald-archive (0.3.6) unstable; urgency=medium
+
+  * Archive and evict journald's disposed-of `*@*.journal~` files. When
+    journald cannot use a journal file (corruption, or features it does not
+    support) it renames it to `<prefix>@<id>-<id>.journal~` and opens a fresh
+    one; the file stays sealed and `journalctl` reads it like any other. Both
+    the eviction and the archival `find` matched only `*@*.journal`, so those
+    files never left the hot tier — journald's own vacuum eventually deleted
+    them, losing history the archive was supposed to keep — and any that did
+    reach the archive could never be reclaimed. Both patterns now share one
+    definition, so the two halves cannot drift apart again. Covered by the new
+    `tests/disposed-journal.sh`.
+
+ -- Alexander <alexander.s.m@gmail.com>  Mon, 31 Aug 2026 20:05:19 +0000
+
 journald-archive (0.3.5) unstable; urgency=low
 
   * Refuse to start the archival service unless the archive is actually

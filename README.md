@@ -20,7 +20,7 @@ separate archive (cheap to store, slow but rarely accessed).
 ```
 /var/log/journal/                  rootfs, no compression — hot tier
                                    (systemd-journald writes here directly)
-        ↓ timer moves *@*.journal
+        ↓ timer moves *@*.journal and *@*.journal~
 /var/log/journal_archive.btrfs     loopback file on rootfs
    │  mount: compress-force=zstd:8
    ▼
@@ -112,6 +112,12 @@ options and tab-completes like `journalctl`.
   journaling: `systemctl restart systemd-journal-flush`. This is upstream
   systemd behavior — this tool deliberately does not auto-flush, so you can do
   maintenance with logs going to tmpfs.
+
+- Both rotated journals (`*@*.journal`) and the files journald disposes of
+  when it cannot use them (`*@*.journal~`, e.g. after corruption) are archived
+  and evicted; `journalctl` reads the latter too, so they are history like any
+  other. The active `system.journal` has no `@` in its name and is never
+  touched.
 
 - The archive timer skips rotated files younger than `GRACE_MINUTES`
   (default 30, matching the timer interval). This both avoids racing journald

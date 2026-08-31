@@ -13,6 +13,8 @@ these). Copy the working tree up and run:
 make -C packaging/deb build         # builds the .deb
 sudo tests/eviction.sh              # regression test: archive eviction must
                                     # free space and exit 0 (see tests/README.md)
+sudo tests/disposed-journal.sh      # regression test: '*@*.journal~' files are
+                                    # archived and evicted like rotated ones
 ```
 
 `tests/eviction.sh` exists because eviction was once broken for months while
