@@ -2,7 +2,8 @@ name: Release
 
 # Triggered by pushing a version tag (e.g. v0.3.0). Builds the .deb clean-room
 # from exactly the tagged commit, gates on the release checklist, then creates
-# the GitHub Release with the .deb attached. Building from the tag (not a
+# the GitHub Release with the .deb attached and the top changelog entry as its
+# body. Building from the tag (not a
 # developer's working tree) guarantees the embedded changelog matches what is
 # published.
 
@@ -47,9 +48,27 @@ jobs:
       - name: Lint package
         run: make -C packaging/deb lint
 
+      - name: Build release notes from the changelog
+        run: |
+          # The release body is the top changelog entry — the same text that
+          # ships inside the .deb — so the release says what changed instead of
+          # only linking a commit range. dpkg-parsechangelog prints the entry
+          # with a leading blank line, the source header and a "." separator
+          # (dropped by tail), body indented by two spaces (undented into
+          # Markdown bullets, wrapped lines staying indented under them), and
+          # any blank line inside the entry as a lone "." (turned back into a
+          # blank line). Built after the package so it cannot end up in it.
+          dpkg-parsechangelog -l packaging/deb/debian/changelog -S Changes --count 1 \
+            | tail -n +4 | sed -e 's/^  //' -e 's/^\.$//' > release-notes.md
+          cat release-notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: packaging/deb/dist/*.deb
           fail_on_unmatched_files: true
+          # body_path is prepended to the notes GitHub generates from the
+          # commits/PRs in the range, which stay on as the "Full Changelog"
+          # trailer below it.
+          body_path: release-notes.md
           generate_release_notes: true

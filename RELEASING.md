@@ -47,6 +47,11 @@ the changelog's one-word statement of how much a user should care:
 (In a Debian archive `urgency` also sets the unstable→testing migration delay;
 here it is effectively just that human signal, but keep it honest anyway.)
 
+The entry is also what the release workflow puts in the **GitHub Release body**
+(GitHub's auto-generated notes are appended below it), so write it for a human
+deciding whether to upgrade — it is the release description, not just a
+`.deb` internal.
+
 ## 3. Commit, tag, push
 
 ```bash
@@ -59,5 +64,5 @@ git push origin v<version>  # the tag push triggers the release build
 The release workflow (`.github/workflows/release.yml`) then, from the tagged
 commit only: verifies the changelog version/distribution against the tag, builds
 the `.deb` clean-room, lints it, and publishes the GitHub Release with the `.deb`
-attached. Building from the tag (not a working tree) guarantees the embedded
+attached and the top changelog entry as the release body. Building from the tag (not a working tree) guarantees the embedded
 changelog matches what is published.
