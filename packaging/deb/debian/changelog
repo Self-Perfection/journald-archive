@@ -1,3 +1,17 @@
+journald-archive (0.3.7) unstable; urgency=medium
+
+  * Stop the install from hanging forever when there is no terminal to
+    answer the archive-size question, e.g. `ssh host apt install ...`
+    without a tty. debconf then falls back to its teletype frontend, which
+    reads an empty answer from the closed stdin every time; the size prompt
+    rejected it, showed its error and asked again, endlessly, flooding the
+    output. The fallback to the suggested default used to cover only a
+    question that could not be shown at all; it now also kicks in after five
+    invalid answers in a row. Interactive installs are unaffected, and
+    `DEBIAN_FRONTEND=noninteractive` installs never hit the loop.
+
+ -- Alexander <alexander.s.m@gmail.com>  Thu, 22 Oct 2026 13:21:46 +0000
+
 journald-archive (0.3.6) unstable; urgency=medium
 
   * Archive and evict journald's disposed-of `*@*.journal~` files. When

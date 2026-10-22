@@ -6,9 +6,12 @@ set -e
 # Prompt for a debconf string template until the answer is a positive integer.
 # If the question cannot be shown (e.g. a noninteractive frontend), fall back
 # to the supplied default rather than looping forever or accepting garbage.
+# The same fallback applies after a few invalid answers: a question that *is*
+# shown can still never get a valid answer, e.g. the teletype frontend with
+# stdin at EOF (`ssh host apt install ...` without a tty) answers '' forever.
 #   $1 = template   $2 = priority   $3 = default
 ask_positive_int() {
-    local template="$1" priority="$2" default="$3" shown
+    local template="$1" priority="$2" default="$3" shown tries=0
     db_fget "$template" seen
     if [ "$RET" != "true" ]; then
         db_set "$template" "$default"
@@ -21,8 +24,10 @@ ask_positive_int() {
             ''|*[!0-9]*) ;;          # empty or contains a non-digit
             *[1-9]*)     return 0 ;; # all digits and not all zero -> >= 1
         esac
-        if [ "$shown" -eq 0 ]; then
-            # Could not prompt (noninteractive); use a known-good value.
+        tries=$((tries + 1))
+        if [ "$shown" -eq 0 ] || [ "$tries" -ge 5 ]; then
+            # Could not prompt (noninteractive) or no usable answer is coming;
+            # use a known-good value.
             db_set "$template" "$default"
             return 0
         fi
