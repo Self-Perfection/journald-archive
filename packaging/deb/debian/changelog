@@ -1,4 +1,4 @@
-journald-archive (0.3.8) UNRELEASED; urgency=high
+journald-archive (0.3.8) unstable; urgency=high
 
   * Stop eviction from deleting the entire archive while its files are open.
     Unlinking a file that a process still holds open frees no space until it
@@ -34,7 +34,7 @@ journald-archive (0.3.8) UNRELEASED; urgency=high
     from each file's real compressed size; without it, from the archive's
     average compression ratio.
 
- -- Alexander <alexander.s.m@gmail.com>  Mon, 09 Nov 2026 12:00:00 +0000
+ -- Alexander <alexander.s.m@gmail.com>  Tue, 10 Nov 2026 01:19:57 +0000
 
 journald-archive (0.3.7) unstable; urgency=medium
 
