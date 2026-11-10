@@ -1,4 +1,4 @@
-.TH JOURNALCTL-ALL 1 "2026-06-08" "journald-archive 0.3.1" "User Commands"
+.TH JOURNALCTL-ALL 1 "2026-11-09" "journald-archive 0.3.8" "User Commands"
 .SH NAME
 journalctl-all \- query the combined live + archived systemd journal
 .SH SYNOPSIS
@@ -6,7 +6,7 @@ journalctl-all \- query the combined live + archived systemd journal
 .RI [ journalctl-options "...]"
 .SH DESCRIPTION
 .B journalctl-all
-is a thin wrapper around
+is a wrapper around
 .BR journalctl (1)
 that queries the read-only mergerfs union of the hot tier
 .RI ( /var/log/journal )
@@ -27,6 +27,74 @@ All arguments are passed through to
 unchanged, so every option behaves identically \(em the only difference is
 that the query spans the full retained history (live plus archive) instead of
 only the recent logs in the hot tier.
+.SS Time-window pruning
+.BR journalctl (1)
+opens and scans every journal file in the directory, even when
+.B \-\-since
+or
+.B \-\-until
+rules most of them out; over a long archive that is slow, and it keeps every
+archived file open while the query runs.
+When the query has
+.BR \-S / \-\-since
+and/or
+.BR \-U / \-\-until ,
+.B journalctl-all
+instead passes
+.B \-\-directory
+a temporary directory of symlinks to just the journal files that can overlap
+that window, laid out like the real one and with the same file names, and
+removes it when
+.BR journalctl (1)
+exits.
+.BR journalctl (1)
+still applies all filtering itself, including
+.BR \-\-system / \-\-user .
+.PP
+A rotated file is considered to span from the timestamp of its first entry,
+encoded in its name, to its modification time.
+Active files and journald's disposed-of
+.I *.journal~
+files are always included.
+.PP
+Pruning is skipped, and the full combined directory is used, whenever it could
+change the result or the arguments are not fully understood: an unknown option,
+a timestamp
+.B systemd-analyze timestamp
+cannot parse,
+.BR \-f ,
+.BR \-b / \-k
+(except
+.BI \-\-boot= ID
+with an explicit boot ID), cursors,
+.BR \-D ,
+.BR \-\-file ,
+.BR \-M ,
+.BR \-\-root ,
+.BR \-\-image ,
+and commands such as
+.BR \-\-list\-boots ,
+.BR \-\-disk\-usage ,
+.B \-F
+or
+.BR \-\-header .
+.PP
+If the window leaves out no file at all, the full directory is used too, since
+a symlink per file would buy nothing.
+Set
+.B JOURNALCTL_ALL_VERBOSE=1
+to print the window and how many files were kept.
+.PP
+A query over the full directory keeps every archived file open while it runs,
+which postpones archive eviction; prefer plain
+.B journalctl -f
+over
+.B journalctl-all -f
+for following live logs.
+.PP
+Limitation: if the system clock was stepped backwards while a file was being
+written, that file can hold entries newer than its modification time, which a
+pruned query may miss.
 .PP
 If the combined view is not currently mounted,
 .B journalctl-all
@@ -36,10 +104,16 @@ anyway.
 .SH EXAMPLES
 .TP
 .B journalctl-all -u nginx --since 2025-01-01
-Show all nginx logs since the start of 2025, including archived ones.
+Show all nginx logs since the start of 2025, including archived ones; only
+files that can hold entries from 2025 on are opened.
 .TP
 .B journalctl-all --disk-usage
 Report the on-disk size across both tiers.
+.SH ENVIRONMENT
+.TP
+.B JOURNALCTL_ALL_VERBOSE
+If non-empty, report the pruning window and the number of files kept on
+standard error.
 .SH SEE ALSO
 .BR journalctl (1),
 .BR journald-archive (8)

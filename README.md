@@ -101,9 +101,18 @@ journalctl -u nginx -n 100
 journalctl-all -u nginx --since 2025-01-01
 ```
 
-`journalctl-all` is a thin wrapper for
+`journalctl-all` is a wrapper for
 `journalctl --directory=/var/log/journal_combined`; it takes all the same
 options and tab-completes like `journalctl`.
+
+journalctl opens and scans every file in the directory even with `--since`, so
+with `-S`/`--since` and/or `-U`/`--until` the wrapper instead points it at a
+temporary directory of symlinks to only the files that can overlap the window
+(span = head timestamp from the file name .. mtime). journalctl still does all
+the filtering itself. Whenever pruning could change the result — `-f`, `-b`,
+cursors, an unknown option, an unparsable time, ... — it falls back to the full
+directory. `JOURNALCTL_ALL_VERBOSE=1` shows how many files were kept. See
+`journalctl-all(1)`.
 
 ## Maintenance notes
 
@@ -141,6 +150,12 @@ options and tab-completes like `journalctl`.
   deleting an open file frees no space until it is closed. Meanwhile new
   rotated journals wait in the hot tier. The service log names the holder
   (`mergerfs` = a query through the combined view).
+
+- Queries that read the whole archive hold all of it open for as long as they
+  run, and so block eviction: `journalctl-all` without `--since`/`--until`
+  left open in a pager, and especially `journalctl-all -f`, which always uses
+  the full archive. For following live logs use plain `journalctl -f`; the
+  hot tier has everything recent.
 
 - This tool does NOT modify `/etc/systemd/journald.conf`. Set
   `SystemMaxFileSize` etc. to your own taste.

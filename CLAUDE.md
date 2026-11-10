@@ -35,6 +35,7 @@ make -C packaging/deb build      # -> packaging/deb/dist/*.deb
 sudo tests/eviction.sh           # functional regression test (needs root)
 sudo tests/disposed-journal.sh   # '*.journal~' handling (needs root)
 sudo tests/open-files.sh         # eviction vs. open journals (needs root)
+sudo tests/journalctl-all-window.sh  # journalctl-all time pruning (needs root)
 make -C packaging/deb shellcheck # static check of all shell scripts (no root)
 ```
 

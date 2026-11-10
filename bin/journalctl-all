@@ -1,13 +1,44 @@
 #!/bin/sh
 # journalctl over the combined hot+archive view.
 #
-# Thin wrapper around `journalctl --directory=/var/log/journal_combined`,
-# the read-only mergerfs union of the live journal and the compressed
-# archive. All arguments are passed through unchanged, so it behaves exactly
-# like journalctl but queries the full history instead of only the hot tier.
+# Runs `journalctl --directory=/var/log/journal_combined "$@"`, the read-only
+# mergerfs union of the live journal and the compressed archive. All arguments
+# are passed through unchanged.
+#
+# Time-window pruning. journalctl opens and scans EVERY file in the directory,
+# even with --since/--until: on a long archive that means decompressing years
+# of history to answer "since yesterday" (and holding every archived file open
+# for as long as the query runs, which postpones archive eviction). So when the
+# query has --since and/or --until, we hand journalctl a temporary directory of
+# symlinks to just the files that can overlap the window, laid out exactly like
+# the real one (<machine-id>/<file name>). journalctl itself still does all the
+# filtering — --since/--until, --system/--user (by file name, which the symlinks
+# keep), units, matches — we only leave out files that cannot contain matching
+# entries.
+#
+# A rotated journal's time span is known without reading it: its name is
+# "<prefix>@<seqnum-id>-<head-seqnum>-<head-realtime>.journal", whose last field
+# is the realtime (hex µs) of its first entry, and its mtime is the time of its
+# last write (preserved when the archiver moves it). Files that do not have that
+# shape — the active "<prefix>.journal", journald's disposed-of "*.journal~"
+# (their name holds the disposal time, not the head) — are always included.
+#
+# Anything we do not fully understand falls back to the plain, unpruned
+# directory: an unknown option, a timestamp we cannot parse, --follow (new files
+# after rotation would not show up in the symlink directory), options that pick
+# another source (-D, --file, -M, --root, --image), --boot/-k (relative boot
+# offsets and "the latest boot" depend on which files are present), cursors,
+# and commands that do not filter by time (--list-boots, --disk-usage, -F, ...).
+# The fallback is only slower, never wrong.
+#
+# Known gap: a backwards clock step inside a file (e.g. NTP correcting a fast
+# clock) can leave entries newer than the file's mtime; such entries can be
+# missing from a pruned query. Forward steps (a board booting at 1970 before
+# NTP) only widen a file's span and are harmless.
 set -eu
 
-COMBINED="/var/log/journal_combined"
+# Override for tests only.
+COMBINED="${JOURNALCTL_ALL_DIR:-/var/log/journal_combined}"
 
 if ! mountpoint -q -- "$COMBINED"; then
     echo "journalctl-all: warning: $COMBINED is not mounted;" \
@@ -15,4 +46,200 @@ if ! mountpoint -q -- "$COMBINED"; then
     echo "    systemctl start var-log-journal_combined.mount" >&2
 fi
 
-exec journalctl --directory="$COMBINED" "$@"
+full() {
+    exec journalctl --directory="$COMBINED" "$@"
+}
+
+is_boot_id() {
+    case $1 in
+        *[!0-9a-f]*) return 1 ;;
+    esac
+    [ "${#1}" -eq 32 ]
+}
+
+# --- scan the arguments: find --since/--until, bail out on anything else that
+# would make pruning unsafe. Values are taken the way journalctl's getopt does:
+# "--opt=VAL", "--opt VAL", "-xVAL", "-x VAL", short options may be bundled.
+since='' until='' utc='' need='' prune=1
+for a in "$@"; do
+    if [ -n "$need" ]; then
+        case $need in
+            S) since=$a ;;
+            U) until=$a ;;
+        esac
+        need=
+        continue
+    fi
+    case $a in
+        --) break ;;              # the rest are matches
+        --*=*) name=${a%%=*} val=${a#*=} inline=1 ;;
+        --*)   name=$a val='' inline='' ;;
+        -?*)
+            # Bundle of short options.
+            rest=${a#-}
+            while [ -n "$rest" ]; do
+                c=${rest%"${rest#?}"}
+                rest=${rest#?}
+                case $c in
+                    m|r|x|a|q|e) ;;
+                    S|U)
+                        if [ -n "$rest" ]; then
+                            if [ "$c" = S ]; then since=$rest; else until=$rest; fi
+                        else
+                            need=$c
+                        fi
+                        break ;;
+                    u|t|T|p|g|o)
+                        [ -n "$rest" ] || need=skip
+                        break ;;
+                    n)  break ;;      # optional value, attached only
+                    *)  prune=; break ;;   # b k f c D M F N h I ... or unknown
+                esac
+            done
+            [ -n "$prune" ] || break
+            continue ;;
+        *) continue ;;            # a match (FIELD=value, path, ...)
+    esac
+    case $name in
+        --since|--until)
+            v=S; [ "$name" = --until ] && v=U
+            if [ -n "$inline" ]; then
+                if [ "$v" = S ]; then since=$val; else until=$val; fi
+            else
+                need=$v
+            fi ;;
+        --utc) utc=1 ;;
+        --system|--user|--merge|--reverse|--catalog|--all|--quiet|--no-pager|\
+        --pager-end|--no-hostname|--no-full|--full|--show-cursor|\
+        --truncate-newline|--no-tail|--lines|--case-sensitive) ;;
+        --unit|--user-unit|--identifier|--exclude-identifier|--priority|\
+        --facility|--grep|--output|--output-fields|--namespace)
+            [ -n "$inline" ] || need=skip ;;
+        --boot)
+            # Only an explicit boot ID means the same thing on a subset.
+            if [ -z "$inline" ] || ! is_boot_id "$val"; then prune=; fi ;;
+        *) prune= ;;
+    esac
+    [ -n "$prune" ] || break
+done
+[ -z "$need" ] || [ "$need" = skip ] || prune=   # dangling -S/-U: let journalctl complain
+
+if [ -z "$prune" ] || { [ -z "$since" ] && [ -z "$until" ]; }; then
+    full "$@"
+fi
+
+# --- turn the timestamps into UNIX seconds with systemd's own parser (the one
+# journalctl uses), both bounds in one call. journalctl parses them in local
+# time; in case some version applies --utc to them, also parse them in UTC and
+# widen the window to cover both readings (done in the awk below).
+#
+# Process count matters more than anything else here (each fork+exec costs
+# ~0.5-1 ms, comparable to the whole find), so the steps below are arranged to
+# stay at a fixed ~a dozen processes however many files there are.
+bounds() {   # $1 = "" (local time) or "utc"; sets b_since/b_until ("-" = none)
+    tz=$1
+    if [ -n "$since" ] && [ -n "$until" ]; then set -- "$since" "$until"
+    elif [ -n "$since" ]; then set -- "$since"
+    else set -- "$until"
+    fi
+    n=$#
+    # An unparsable value makes systemd-analyze fail; then fewer lines come out.
+    out=$(env ${tz:+TZ=UTC} systemd-analyze timestamp -- "$@" 2>/dev/null \
+          | LC_ALL=C sed -n 's/^[[:space:]]*UNIX seconds: @//p')
+    # shellcheck disable=SC2086  # numbers only, so plain word splitting is safe
+    set -- $out
+    [ "$#" -eq "$n" ] || return 1
+    b_since=- b_until=-
+    if [ -n "$since" ]; then b_since=$1; shift; fi
+    if [ -n "$until" ]; then b_until=$1; fi
+}
+bounds "" || full "$@"
+since_l=$b_since until_l=$b_until since_u=- until_u=-
+if [ -n "$utc" ]; then
+    bounds utc || full "$@"
+    since_u=$b_since until_u=$b_until
+fi
+
+# --- pick the files whose span [head, mtime] can overlap [since, until].
+# journalctl -D reads the directory itself and one level of subdirectories
+# (<machine-id>/), hence -maxdepth 2. If find fails we cannot trust the listing:
+# the trailing marker line makes awk give up (exit 4) and we use the full dir.
+# awk also gives up (exit 3) when no file is left out: then the symlink mirror
+# would cost a symlink per file and buy nothing. LC_ALL=C: byte semantics for
+# length/substr (faster, esp. with gawk), and the names are ASCII anyway.
+keep=$( { find "$COMBINED" -mindepth 1 -maxdepth 2 -type f \
+              \( -name '*.journal' -o -name '*.journal~' \) \
+              -printf '%T@ %p\n' 2>/dev/null || echo '!find-failed'; } \
+        | LC_ALL=C awk -v sl="$since_l" -v ul="$until_l" \
+                       -v su="$since_u" -v uu="$until_u" \
+                       -v verbose="${JOURNALCTL_ALL_VERBOSE:-}" '
+    function hex(s,   i, v) {
+        v = 0
+        for (i = 1; i <= length(s); i++)
+            v = v * 16 + index("0123456789abcdef", substr(s, i, 1)) - 1
+        return v
+    }
+    BEGIN {
+        since = sl; if (su != "-" && su + 0 < since + 0) since = su
+        until = ul; if (uu != "-" && uu + 0 > until + 0) until = uu
+        if (since == "-") since = ""
+        if (until == "-") until = ""
+    }
+    $0 == "!find-failed" { failed = 1; exit 4 }
+    NF == 0 { next }
+    {
+        total++
+        mtime = $1 + 0
+        path = substr($0, length($1) + 2)
+        # The mtime test needs no name parsing; do it first.
+        if (since != "" && mtime < since + 0 && rotated(path)) next
+        # The head timestamp (from the name) only matters for --until.
+        if (until != "" && rotated(path) && hex(p[3]) / 1000000 > until + 0) next
+        kept[++n] = path
+    }
+    # Is this a rotated "<prefix>@<seqnum-id>-<seqnum>-<head>.journal"? Splits
+    # the id into p[]. Anything else (active, *.journal~) is always kept.
+    function rotated(path,   name, id) {
+        name = path; sub(/.*\//, "", name)
+        if (name !~ /@[0-9a-f-]+\.journal$/) return 0
+        id = name; sub(/^[^@]*@/, "", id); sub(/\.journal$/, "", id)
+        return split(id, p, "-") == 3 && length(p[1]) == 32 &&
+               length(p[2]) == 16 && length(p[3]) == 16
+    }
+    END {
+        if (failed) exit 4
+        if (verbose != "")
+            printf "journalctl-all: window [%s, %s]: %d of %d files%s\n",
+                   since == "" ? "-inf" : since, until == "" ? "+inf" : until,
+                   n, total, n == total ? " (none left out: using the full directory)" : "" \
+                   > "/dev/stderr"
+        if (n == total) exit 3
+        for (i = 1; i <= n; i++) print kept[i]
+    }') || full "$@"
+
+# --- mirror them as symlinks, then run journalctl on the mirror.
+# `cp -s --parents` recreates each file's full path under $tmp as a symlink
+# (one process, directories included), so the mirror of $COMBINED is
+# $tmp$COMBINED, with the same <machine-id>/<file name> layout.
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/journalctl-all.XXXXXXXX") || full "$@"
+trap 'rm -rf -- "$tmp"' EXIT
+# Ctrl-C/Ctrl-\ reach journalctl too (same process group); a no-op handler (not
+# '' — an ignored signal stays ignored in journalctl) keeps us alive to clean up.
+trap ':' INT QUIT
+trap 'exit 129' HUP
+trap 'exit 143' TERM
+
+if [ -n "$keep" ]; then
+    printf '%s\n' "$keep" | xargs -r -d '\n' cp -s --parents -t "$tmp" --
+else
+    mkdir -p -- "$tmp$COMBINED"
+fi || {
+    # exec below skips the EXIT trap, so clean up by hand.
+    rm -rf -- "$tmp"
+    trap - EXIT INT QUIT HUP TERM
+    full "$@"
+}
+
+rc=0
+journalctl --directory="$tmp$COMBINED" "$@" || rc=$?
+exit "$rc"

@@ -17,6 +17,9 @@ sudo tests/disposed-journal.sh      # regression test: '*@*.journal~' files are
                                     # archived and evicted like rotated ones
 sudo tests/open-files.sh            # regression test: eviction must not delete
                                     # journals that are open
+sudo tests/journalctl-all-window.sh # journalctl-all --since/--until pruning:
+                                    # same output as journalctl -D, falls back
+                                    # to the full directory when unsure
 ```
 
 Eviction sizes its deletions with `compsize` when it is installed and by an

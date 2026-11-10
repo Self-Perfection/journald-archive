@@ -15,6 +15,19 @@ journald-archive (0.3.8) UNRELEASED; urgency=high
     count too), nothing is deleted and eviction is postponed to the next run;
     the service log names the process holding it. Now depends on psmisc for
     `fuser`. Covered by the new `tests/open-files.sh`.
+  * Make `journalctl-all --since/--until` open only the journal files that
+    can overlap the time window. journalctl opens and scans every file in the
+    directory regardless of the window, so a "since yesterday" query read the
+    whole archive — slowly, and holding every archived file open (which now
+    postpones eviction). The wrapper passes journalctl a temporary directory
+    of symlinks to just the relevant files, keeping their names, so all of
+    journalctl's own filtering (including --system/--user) still applies. A
+    rotated file spans from the head timestamp in its name to its mtime. It
+    falls back to the full directory whenever pruning could change the result
+    (-f, -b/-k, cursors, other sources, unknown options, unparsable times),
+    and when the window leaves out no file anyway.
+    Covered by the new `tests/journalctl-all-window.sh`, which also checks the
+    output is identical to plain `journalctl -D` on real rotated journals.
   * Shellcheck all shell scripts in CI and in the release workflow
     (`make -C packaging/deb shellcheck`).
   * Recommend btrfs-compsize: with `compsize` eviction sizes the deletion set
