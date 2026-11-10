@@ -34,6 +34,7 @@ btrfs) — **not** in a container, and not via CI:
 make -C packaging/deb build      # -> packaging/deb/dist/*.deb
 sudo tests/eviction.sh           # functional regression test (needs root)
 sudo tests/disposed-journal.sh   # '*.journal~' handling (needs root)
+make -C packaging/deb shellcheck # static check of all shell scripts (no root)
 ```
 
 A clean build and a "service exited 0" smoke test are **not** sufficient. The

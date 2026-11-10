@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes \
-            build-essential debhelper dpkg-dev fakeroot lintian
+            build-essential debhelper dpkg-dev fakeroot lintian shellcheck
 
       - name: Verify changelog matches tag
         run: |
@@ -41,6 +41,9 @@ jobs:
             echo "::error::Tag v$tag does not match changelog version $version."
             exit 1
           fi
+
+      - name: Shellcheck
+        run: make -C packaging/deb shellcheck
 
       - name: Build package
         run: make -C packaging/deb build

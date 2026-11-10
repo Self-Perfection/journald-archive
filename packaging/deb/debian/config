@@ -11,6 +11,9 @@ set -e
 # stdin at EOF (`ssh host apt install ...` without a tty) answers '' forever.
 #   $1 = template   $2 = priority   $3 = default
 ask_positive_int() {
+    # 'local' is not POSIX, but Debian Policy 10.4 allows it in /bin/sh
+    # scripts and every /bin/sh Debian ships (dash, bash) supports it.
+    # shellcheck disable=SC3043
     local template="$1" priority="$2" default="$3" shown tries=0
     db_fget "$template" seen
     if [ "$RET" != "true" ]; then

@@ -26,7 +26,16 @@ under real load.
 Then install the `.deb` on the VM and sanity-check the live units
 (`systemctl status`, `journalctl-all`, run `journald-archive.service` once).
 
-## 2. Finalize the changelog
+## 2. Shellcheck
+
+```bash
+make -C packaging/deb shellcheck    # every shell script in the repo, -S warning
+```
+
+Needs no root or VM. CI and the release workflow run it too, but run it before
+tagging rather than finding out from a failed release build.
+
+## 3. Finalize the changelog
 
 In `packaging/deb/debian/changelog`, the top entry must name a real
 distribution (`unstable`), **not** `UNRELEASED`, and its version must equal the
@@ -52,7 +61,7 @@ The entry is also what the release workflow puts in the **GitHub Release body**
 deciding whether to upgrade — it is the release description, not just a
 `.deb` internal.
 
-## 3. Commit, tag, push
+## 4. Commit, tag, push
 
 ```bash
 git commit -am "…(<version>)"
@@ -62,7 +71,7 @@ git push origin v<version>  # the tag push triggers the release build
 ```
 
 The release workflow (`.github/workflows/release.yml`) then, from the tagged
-commit only: verifies the changelog version/distribution against the tag, builds
-the `.deb` clean-room, lints it, and publishes the GitHub Release with the `.deb`
+commit only: verifies the changelog version/distribution against the tag, shellchecks the
+scripts, builds the `.deb` clean-room, lints it, and publishes the GitHub Release with the `.deb`
 attached and the top changelog entry as the release body. Building from the tag (not a working tree) guarantees the embedded
 changelog matches what is published.

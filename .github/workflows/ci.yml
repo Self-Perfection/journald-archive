@@ -1,6 +1,6 @@
 name: CI
 
-# Build the .deb and run lintian on every push to main and every PR, so a
+# Shellcheck the scripts, build the .deb and run lintian on every push to main and every PR, so a
 # broken build or a new lintian regression is caught before release time.
 # Note: this does NOT functionally test the package — that needs systemd as
 # PID 1 plus loop devices and is done manually in a VM.
@@ -23,7 +23,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes \
-            build-essential debhelper dpkg-dev fakeroot lintian
+            build-essential debhelper dpkg-dev fakeroot lintian shellcheck
+
+      - name: Shellcheck
+        run: make -C packaging/deb shellcheck
 
       - name: Build package
         run: make -C packaging/deb build

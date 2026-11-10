@@ -49,6 +49,7 @@ PFX="journaldarchivetest"
 ROTATED="$PFX@0000000000000001-00065a5d27c00b0d.journal"
 DISPOSED="$PFX@00065a5d27c00b0d-7875f4c5d8bb1463.journal~"   # journald's shape
 
+# shellcheck disable=SC2317  # only ever invoked via trap
 cleanup() {
     set +e
     rm -f -- "$SRC/$PFX@"*.journal "$SRC/$PFX@"*.journal~

@@ -42,6 +42,7 @@ SRC="/var/log/journal/$MID"   # the helper exits early unless this exists
 created_src=
 margin_bytes=$((MARGIN_MIB * 1024 * 1024))
 
+# shellcheck disable=SC2317  # only ever invoked via trap
 cleanup() {
     set +e
     mountpoint -q "$MNT" && umount "$MNT"
