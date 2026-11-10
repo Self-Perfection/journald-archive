@@ -15,7 +15,13 @@ sudo tests/eviction.sh              # regression test: archive eviction must
                                     # free space and exit 0 (see tests/README.md)
 sudo tests/disposed-journal.sh      # regression test: '*@*.journal~' files are
                                     # archived and evicted like rotated ones
+sudo tests/open-files.sh            # regression test: eviction must not delete
+                                    # journals that are open
 ```
+
+Eviction sizes its deletions with `compsize` when it is installed and by an
+estimate otherwise, so run `eviction.sh`, `disposed-journal.sh` and
+`open-files.sh` both with and without `btrfs-compsize` installed.
 
 `tests/eviction.sh` exists because eviction was once broken for months while
 "service exited 0" smoke tests stayed green — they ran on an empty archive and

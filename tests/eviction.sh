@@ -65,14 +65,17 @@ fallocate -l "${ARCHIVE_MIB}MiB" "$IMG"
 mkfs.btrfs -q --mixed --metadata single --data single "$IMG"
 mount -o loop,compress-force=zstd:8 "$IMG" "$MNT"
 
-# --- point the helper at the sandbox (saving the real config)
+# --- point the helper at the sandbox (saving the real config). GRACE_MINUTES
+# is huge so the helper's move step leaves the machine's real hot tier alone:
+# journals moved in from /var/log/journal after eviction (e.g. ones another
+# test rotated) would eat the space this test checks was freed.
 [ -e "$DEFAULTS" ] && cp -a "$DEFAULTS" "$BACKUP"
 mkdir -p "$(dirname "$DEFAULTS")"
 cat >"$DEFAULTS" <<EOF
 ARCHIVE_MOUNT="$MNT"
 ARCHIVE_FILE="$IMG"
 FREE_MARGIN_MIB=$MARGIN_MIB
-GRACE_MINUTES=0
+GRACE_MINUTES=99999999
 EOF
 [ -d "$SRC" ] || { mkdir -p "$SRC"; created_src=1; }
 

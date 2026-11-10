@@ -77,35 +77,116 @@ if [ ! -d "$DST" ]; then
     install -d -m 2755 -o root -g systemd-journal "$DST"
 fi
 
-# Eviction: drop the oldest archived journals until at least FREE_MARGIN_MIB is
-# free. We re-read free space after each delete, but btrfs frees extents only on
-# transaction commit, so `btrfs filesystem sync` forces the accounting to settle
-# before we look again — otherwise the lagging counter would make us over-evict.
-# (st_blocks/du can't substitute here: on btrfs they report the uncompressed
-# size, not the compressed on-disk usage, so we cannot account for freed space
-# ourselves — the filesystem is the only source of truth.)
-while :; do
-    free=$(btrfs_usage_field 'Free \(estimated\)')
-    if [ -z "$free" ]; then
-        echo "journald-archive: could not read archive free space; skipping eviction" >&2
-        break
-    fi
-    [ "$free" -ge "$margin_bytes" ] && break
+# Eviction: drop just enough of the oldest archived journals to restore
+# FREE_MARGIN_MIB of free space.
+#
+# The deletion set is PLANNED UP FRONT and deleted in one go — there is no
+# "delete one, re-read free space, repeat" loop. Such a loop trusts the
+# filesystem counter to grow after each delete, and it does not when files are
+# still open: unlinking an open file frees nothing until it is closed. A
+# long-running journalctl over the combined view opens every archived file
+# (journalctl opens all files in the directory, whatever its time filter, and
+# mergerfs holds the underlying archive files open on its behalf), so the old
+# loop never saw free space grow and deleted the entire archive. Planning first
+# bounds every run to the files that genuinely had to go, however the counter
+# behaves; if the estimate falls short, the next timer run plans again from the
+# new free space.
+#
+# Planning needs each file's on-disk (compressed) size. st_size/st_blocks/du
+# report the uncompressed size on btrfs, so:
+#   - with compsize (btrfs-compsize, Recommends:) we read the real per-file
+#     disk usage;
+#   - without it, we scale st_size by the archive's overall ratio (filesystem
+#     "Used" / sum of st_size). That is an estimate: it can fall short when the
+#     oldest files compress worse than average, which only defers the rest of
+#     the eviction to the next run.
+#
+# Open files: if any file in the plan is open, nothing is deleted this run —
+# deleting it would free nothing now, and since free space would not grow, the
+# next run would plan (and delete) the next batch too, draining the archive one
+# deficit per timer tick for as long as the reader lives. `fuser` matches by
+# device and inode (so other paths to the same file, e.g. bind mounts, count
+# too) and also sees files mapped without an open fd. Eviction is not shifted
+# to newer, closed files, to keep it oldest-first. The next timer run retries
+# once the reader is gone; until then new journals wait in the hot tier (moves
+# that hit ENOSPC are retried).
 
-    # Oldest archived journal by mtime. Capture the whole sorted list and take
-    # its first line in the shell — NOT `... | sort -n | head -1`: under
-    # `set -o pipefail`, head closing the pipe after one line makes sort exit on
-    # SIGPIPE (141) once the listing outgrows the pipe buffer, and `set -e` would
-    # then abort the script here, before anything is ever evicted.
+# On-disk bytes of one file per compsize, into $REPLY; empty for "unknown".
+# A global instead of $(...) around the function saves a subshell per file.
+# compsize exits 1 on a file with no extents (empty), which occupies nothing.
+compsize_bytes() {
+    local out t du
+    REPLY=
+    out=$(compsize -b -- "$1" 2>/dev/null) || { REPLY=0; return 0; }
+    while read -r t _ du _; do
+        if [ "$t" = TOTAL ]; then REPLY=$du; return 0; fi
+    done <<<"$out"
+}
+
+# The plan rests on a single reading of free space, so settle the accounting
+# first: btrfs counts writes and frees only once their transaction commits, and
+# a stale (too high) reading would under-plan.
+btrfs filesystem sync "$ARCHIVE_MOUNT" >/dev/null
+free=$(btrfs_usage_field 'Free \(estimated\)')
+if [ -z "$free" ]; then
+    echo "journald-archive: could not read archive free space; skipping eviction" >&2
+elif [ "$free" -lt "$margin_bytes" ]; then
+    deficit=$(( margin_bytes - free ))
+
+    # Oldest first: "<mtime> <st_size> <path>". Captured whole, not piped into
+    # head: under pipefail an early-closing reader SIGPIPEs sort and set -e
+    # aborts the script (the 0.3.4 bug).
     listing=$(find "$ARCHIVE_MOUNT" -type f \( "${JOURNAL_MATCH[@]}" \) \
-              -printf '%T@ %p\n' 2>/dev/null | sort -n)
-    oldest=${listing%%$'\n'*}   # first (oldest) line, or "" if none
-    oldest=${oldest#* }         # strip the "<mtime> " prefix, leaving the path
-    [ -n "$oldest" ] || break   # nothing left to evict
+              -printf '%T@ %s %p\n' 2>/dev/null | sort -n)
 
-    rm -f -- "$oldest"
-    btrfs filesystem sync "$ARCHIVE_MOUNT" >/dev/null
-done
+    use_compsize=
+    command -v compsize >/dev/null && use_compsize=1
+    if [ -z "$use_compsize" ]; then
+        # Overall ratio in parts per million (keeps the integer math within
+        # 64 bits up to multi-TiB archives).
+        used=$(btrfs_usage_field '^\s*Used')
+        apparent=$(awk '{ s += $2 } END { printf "%.0f\n", s }' <<<"$listing")
+        ratio_ppm=1000000
+        if [ -n "$used" ] && [ "$apparent" -gt 0 ]; then
+            ratio_ppm=$(( used * 1000000 / apparent ))
+        fi
+    fi
+
+    plan=()
+    planned=0
+    while [ "$planned" -lt "$deficit" ] && read -r _ size path; do
+        [ -n "$path" ] || continue
+        est=
+        if [ -n "$use_compsize" ]; then compsize_bytes "$path"; est=$REPLY; fi
+        [ -n "$est" ] || est=$(( size * ${ratio_ppm:-1000000} / 1000000 ))
+        plan+=("$path")
+        planned=$(( planned + est ))
+    done <<<"$listing"
+
+    if [ "${#plan[@]}" -gt 0 ] && ! command -v fuser >/dev/null; then
+        # Without fuser we cannot tell whether the plan is open, and deleting
+        # open files is exactly what drains the archive. Fail safe: skip.
+        echo "journald-archive: fuser (psmisc) not found; cannot check whether" \
+             "journals due for eviction are open, so eviction is skipped" >&2
+    elif [ "${#plan[@]}" -gt 0 ]; then
+        # fuser prints the PIDs on stdout (access letters and names go to
+        # stderr) and exits 0 if any of the files is in use. No "--": psmisc
+        # fuser does not support it ("No process specification given"); the
+        # paths are absolute, so none can look like an option.
+        if pids=$(fuser "${plan[@]}" 2>/dev/null); then
+            read -ra pid_list <<<"$pids"
+            holders=$(IFS=,; ps -o pid=,comm= -p "${pid_list[*]}" 2>/dev/null \
+                      | awk '{ printf "%s%s (PID %s)", n++ ? ", " : "", $2, $1 }')
+            echo "journald-archive: eviction postponed: journal(s) due for" \
+                 "eviction are open, so deleting them would free nothing." \
+                 "Held by: ${holders:-${pid_list[*]}} (mergerfs means a journalctl-all" \
+                 "query, e.g. a long one or -f, still running)" >&2
+        else
+            rm -f -- "${plan[@]}"
+            btrfs filesystem sync "$ARCHIVE_MOUNT" >/dev/null
+        fi
+    fi
+fi
 
 # Move sealed journals (rotated, or disposed-of '.journal~' ones — see
 # JOURNAL_MATCH; never the active system.journal) older than the grace period

@@ -1,7 +1,25 @@
-journald-archive (0.3.8) UNRELEASED; urgency=low
+journald-archive (0.3.8) UNRELEASED; urgency=high
 
+  * Stop eviction from deleting the entire archive while its files are open.
+    Unlinking a file that a process still holds open frees no space until it
+    is closed, and a long-running `journalctl-all` query holds every archived
+    file open (journalctl opens all files in the directory regardless of the
+    time filter, and mergerfs keeps the underlying archive files open on its
+    behalf). Eviction deleted the oldest journal and re-read free space until
+    it was above the margin; with nothing ever being freed it kept going until
+    the archive was empty. It now computes the deletion set up front — just
+    enough of the oldest journals to cover the shortfall — and deletes it in
+    one go, so a run can never delete more than it needed to, however the
+    free-space counter behaves. If any file in that set is open (checked with
+    `fuser`, by inode, so other paths to the same file and memory mappings
+    count too), nothing is deleted and eviction is postponed to the next run;
+    the service log names the process holding it. Now depends on psmisc for
+    `fuser`. Covered by the new `tests/open-files.sh`.
   * Shellcheck all shell scripts in CI and in the release workflow
     (`make -C packaging/deb shellcheck`).
+  * Recommend btrfs-compsize: with `compsize` eviction sizes the deletion set
+    from each file's real compressed size; without it, from the archive's
+    average compression ratio.
 
  -- Alexander <alexander.s.m@gmail.com>  Mon, 09 Nov 2026 12:00:00 +0000
 

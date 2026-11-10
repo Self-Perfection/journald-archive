@@ -49,3 +49,32 @@ sudo tests/disposed-journal.sh /path/to/helper
 ```
 
 Exit code 0 = PASS. Takes ~20 s.
+
+## `open-files.sh`
+
+Regression test for eviction emptying the whole archive while its files are
+open. Unlinking an open file frees no space until it is closed; a long
+`journalctl-all` query opens every archived file (mergerfs holds the underlying
+archive files open for it), so the old loop — delete the oldest, re-read free
+space, repeat — never saw free space grow and deleted everything. Eviction now
+plans its deletion set up front and deletes it in one go.
+
+Three cases against a throwaway archive filled past the margin:
+
+- **A.** The oldest 3 files are closed, the rest held open: part of the plan is
+  open, so nothing at all may be deleted (eviction stays oldest-first).
+- **B.** All files held open through a bind mount (another path to the same
+  inodes): `fuser` matches by inode, so again nothing may be deleted.
+- **C.** Nothing open: free space must be restored to the margin.
+
+```bash
+sudo tests/open-files.sh                     # tests ../libexec/journald-archive
+sudo tests/open-files.sh /path/to/helper
+```
+
+Exit code 0 = PASS. Takes ~5 s. Against the 0.3.7 helper case A goes from 247
+files to 0.
+
+Eviction has two sizing paths — `compsize` if installed, otherwise the
+archive's average compression ratio — so run the eviction tests both with and
+without `btrfs-compsize` installed.

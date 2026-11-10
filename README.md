@@ -133,6 +133,15 @@ options and tab-completes like `journalctl`.
   of logs can always force the oldest history out. Size the loopback to the
   budget you can spare.
 
+- Each run deletes only as many of the oldest journals as it takes to cover
+  the shortfall, computed before deleting anything (exact with `compsize` from
+  `btrfs-compsize`, otherwise estimated from the archive's average compression
+  ratio). If any of those files is open (checked with `fuser`) — e.g. a long
+  `journalctl-all` query is running — eviction is postponed to the next run:
+  deleting an open file frees no space until it is closed. Meanwhile new
+  rotated journals wait in the hot tier. The service log names the holder
+  (`mergerfs` = a query through the combined view).
+
 - This tool does NOT modify `/etc/systemd/journald.conf`. Set
   `SystemMaxFileSize` etc. to your own taste.
 

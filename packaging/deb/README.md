@@ -32,7 +32,9 @@ ssh root@host 'apt install /tmp/journald-archive_*.deb'
 ```
 
 Using `apt install` (rather than `dpkg -i`) pulls in `mergerfs` and
-`btrfs-progs` automatically if they are missing.
+`btrfs-progs` automatically if they are missing, plus the recommended
+`btrfs-compsize`, which lets eviction size its deletions exactly (without it,
+it estimates from the archive's average compression ratio).
 
 ### debconf questions
 
